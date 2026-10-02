@@ -6,6 +6,9 @@ namespace Asignua\FilamentRedirects\Tests\Feature;
 
 use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Tests\TestCase;
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Request;
+use Illuminate\Testing\TestResponse;
 
 class TrailingSlashTest extends TestCase
 {
@@ -15,7 +18,7 @@ class TrailingSlashTest extends TestCase
 
         $response = $this->rawRequest('/old/')->assertStatus(301);
 
-        $this->assertSame('http://localhost/new', $response->headers->get('Location'), 'one hop: straight to the target');
+        $this->assertSame('/new', $response->headers->get('Location'), 'one hop: straight to the target');
         $this->assertSame(1, $redirect->refresh()->hits);
     }
 
@@ -77,5 +80,55 @@ class TrailingSlashTest extends TestCase
         $this->redirect('old', 'new', ['language' => 'en']);
 
         $this->rawRequest('/en/old/')->assertRedirect('/en/new');
+    }
+
+    public function test_a_leading_double_slash_never_becomes_a_protocol_relative_location(): void
+    {
+        config()->set('filament-redirects.trailing_slash.canonical', true);
+
+        foreach (['//evil.example/', '///evil.example/', '/\\evil.example/', '/\\/evil.example/'] as $uri) {
+            $location = (string) $this->requestUri($uri)->assertStatus(301)->headers->get('Location');
+
+            $this->assertSame('/evil.example', $location, $uri);
+        }
+    }
+
+    public function test_the_host_header_does_not_shape_the_location(): void
+    {
+        config()->set('filament-redirects.trailing_slash.canonical', true);
+        $this->redirect('old', 'new');
+
+        $this->assertSame('/new', $this->rawRequest('/old/', headers: ['Host' => 'attacker.example'])->headers->get('Location'));
+        $this->assertSame('/nope', $this->rawRequest('/nope/', headers: ['Host' => 'attacker.example'])->headers->get('Location'));
+    }
+
+    public function test_a_percent_encoded_slashed_address_finds_its_row(): void
+    {
+        $this->redirect('привіт', 'new');
+
+        $this->rawRequest('/'.rawurlencode('привіт').'/')->assertStatus(301)->assertRedirect('/new');
+    }
+
+    /**
+     * `Request::create()` runs the URI through parse_url(), which reads `//evil.example/` as a
+     * HOST. PHP-FPM hands the app the raw REQUEST_URI instead - this builds exactly that.
+     */
+    private function requestUri(string $uri): TestResponse
+    {
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => $uri,
+            'HTTP_HOST' => 'localhost',
+            'SERVER_NAME' => 'localhost',
+            'SERVER_PORT' => 80,
+            'SCRIPT_NAME' => '/index.php',
+            'SCRIPT_FILENAME' => '/index.php',
+        ]);
+
+        $kernel = $this->app->make(Kernel::class);
+        $response = $kernel->handle($request);
+        $kernel->terminate($request, $response);
+
+        return TestResponse::fromBaseResponse($response);
     }
 }

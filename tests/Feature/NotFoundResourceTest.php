@@ -9,6 +9,7 @@ use Asignua\FilamentRedirects\Models\Redirect;
 use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Resources\NotFound\Pages\ListNotFound;
 use Asignua\FilamentRedirects\Tests\TestCase;
+use Filament\Tables\Columns\TextColumn;
 use Livewire\Livewire;
 
 class NotFoundResourceTest extends TestCase
@@ -161,5 +162,47 @@ class NotFoundResourceTest extends TestCase
         Livewire::test(ListNotFound::class)
             ->assertTableColumnVisible('status')
             ->assertTableColumnStateSet('status', 'Draft', $entry);
+    }
+
+    public function test_a_loop_through_an_existing_redirect_is_refused_on_the_modal_field(): void
+    {
+        $this->redirect('b', 'old-page');
+        $entry = $this->logEntry('old-page');
+
+        Livewire::test(ListNotFound::class)
+            ->callTableAction('create_redirect', $entry, data: ['to_path' => '/b', 'code' => 301, 'active' => true])
+            ->assertHasTableActionErrors(['to_path']);
+
+        $this->assertSame(1, Redirect::query()->count());
+        $this->assertSame(1, NotFoundEntry::query()->count(), 'the row stays in the log');
+    }
+
+    public function test_the_status_hook_is_asked_once_per_row(): void
+    {
+        $calls = 0;
+        Redirects::statusUsing(function (string $path) use (&$calls): ?array {
+            $calls++;
+
+            return ['label' => 'Draft', 'color' => 'warning'];
+        });
+        $this->logEntry('one');
+        $this->logEntry('two');
+
+        Livewire::test(ListNotFound::class)->assertTableColumnVisible('status');
+
+        $this->assertSame(2, $calls);
+    }
+
+    public function test_the_path_links_to_the_site_only_with_a_base_url(): void
+    {
+        $entry = $this->logEntry('\\evil.example');
+
+        Livewire::test(ListNotFound::class)
+            ->assertTableColumnExists('path', fn (TextColumn $column): bool => $column->getUrl() === 'https://site.test/\\evil.example', $entry);
+
+        config()->set('app.url', '');
+
+        Livewire::test(ListNotFound::class)
+            ->assertTableColumnExists('path', fn (TextColumn $column): bool => $column->getUrl() === null, $entry);
     }
 }

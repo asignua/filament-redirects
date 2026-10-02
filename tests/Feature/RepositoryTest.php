@@ -9,8 +9,8 @@ use Asignua\FilamentRedirects\Models\Redirect;
 use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Repositories\RedirectRepository;
 use Asignua\FilamentRedirects\Tests\TestCase;
-use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Workbench\App\Models\Post;
 
 class RepositoryTest extends TestCase
@@ -137,9 +137,12 @@ class RepositoryTest extends TestCase
         $this->assertTrue(app(RedirectRepository::class)->oldPathTaken('uk', 'old', null));
         $this->assertFalse(app(RedirectRepository::class)->oldPathTaken('uk', 'other', null));
 
-        $this->expectException(QueryException::class);
-
-        Redirects::create('old', 'newer', language: 'uk');
+        try {
+            Redirects::create('old', 'newer', language: 'uk');
+            $this->fail('a duplicate source must be refused');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('data.old_path', $exception->errors(), 'a readable error, not SQLSTATE 23000');
+        }
     }
 
     public function test_the_table_name_is_configurable(): void
@@ -149,5 +152,56 @@ class RepositoryTest extends TestCase
         config()->set('filament-redirects.tables.redirects', 'my_redirects');
 
         $this->assertSame('my_redirects', (new Redirect)->getTable());
+    }
+
+    public function test_a_failed_save_takes_the_compaction_back(): void
+    {
+        $chain = Redirects::create('a', 'b');
+        Redirect::saving(function (Redirect $redirect): void {
+            if ($redirect->old_path === 'b') {
+                throw new RuntimeException('the save failed');
+            }
+        });
+
+        try {
+            Redirects::create('b', 'c');
+            $this->fail('the save should have failed');
+        } catch (RuntimeException) {
+        }
+
+        $this->assertSame('b', $chain->refresh()->to_path, 'the other row is not re-pointed to a redirect that does not exist');
+        $this->assertSame(1, Redirect::query()->count());
+    }
+
+    public function test_a_source_with_a_query_or_a_fragment_is_refused(): void
+    {
+        foreach (['old?id=5', 'page#x'] as $from) {
+            try {
+                Redirects::create($from, 'new');
+                $this->fail($from.' must be refused');
+            } catch (ValidationException $exception) {
+                $this->assertArrayHasKey('data.old_path', $exception->errors());
+            }
+        }
+
+        $this->assertSame(0, Redirect::query()->count());
+    }
+
+    public function test_compaction_never_makes_a_self_loop(): void
+    {
+        $back = Redirects::create('b', 'a', active: false);
+        Redirects::create('a', 'b');
+
+        $this->assertSame('a', $back->refresh()->to_path, 'b -> a is not re-pointed to b -> b');
+    }
+
+    public function test_would_loop_sees_a_loop_through_the_chain(): void
+    {
+        Redirects::create('b', 'old');
+
+        $repository = app(RedirectRepository::class);
+
+        $this->assertTrue($repository->wouldLoop('en', 'old', 'b'));
+        $this->assertFalse($repository->wouldLoop('en', 'old', 'c'));
     }
 }

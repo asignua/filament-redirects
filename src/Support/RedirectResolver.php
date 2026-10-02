@@ -66,7 +66,12 @@ class RedirectResolver
             $target .= (str_contains($target, '?') ? '&' : '?').$query;
         }
 
-        $redirect = redirect()->to($target, $code->value);
+        // NOT redirect()->to(): it would absolutise an internal target with the scheme and host
+        // of the REQUEST, so a forged `Host` / `X-Forwarded-Host` would end up in a cacheable
+        // permanent redirect. A relative `Location` (RFC 9110) keeps the visitor on the host they
+        // asked for, whatever the headers say. location() also collapses `//host` and encodes
+        // non-ASCII bytes.
+        $redirect = new RedirectResponse(RedirectPath::location($target, internal: !$external), $code->value);
 
         // Browsers cache a permanent redirect without an expiry: bound it, so that a change in
         // the panel reaches visitors within `cache_ttl`. 302/307 are not cached anyway.

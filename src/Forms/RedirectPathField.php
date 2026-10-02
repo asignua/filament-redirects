@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Asignua\FilamentRedirects\Forms;
 
+use Asignua\FilamentRedirects\Models\Redirect;
 use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Repositories\RedirectRepository;
 use Asignua\FilamentRedirects\Support\RedirectPath;
@@ -43,6 +44,14 @@ class RedirectPathField
 
                     if (preg_match('/\s/u', $raw) === 1) {
                         $fail(__('filament-redirects::redirects.validation.spaces'));
+
+                        return;
+                    }
+
+                    // The middleware matches the path only: `old?id=5` or `page#x` would be saved
+                    // and never fire.
+                    if (preg_match('/[?#]/', $raw) === 1) {
+                        $fail(__('filament-redirects::redirects.validation.query'));
 
                         return;
                     }
@@ -93,8 +102,8 @@ class RedirectPathField
         return self::base('to_path', $language)
             ->label(__('filament-redirects::redirects.fields.new_path'))
             ->helperText(__('filament-redirects::redirects.fields.new_path_help'))
-            ->rule(static function (Get $get) use ($language, $oldPath): Closure {
-                return static function (string $attribute, mixed $value, Closure $fail) use ($get, $language, $oldPath): void {
+            ->rule(static function (Get $get, ?Model $record) use ($language, $oldPath): Closure {
+                return static function (string $attribute, mixed $value, Closure $fail) use ($get, $record, $language, $oldPath): void {
                     $locale = (string) $language($get);
                     $raw = trim((string) $value);
 
@@ -128,7 +137,19 @@ class RedirectPathField
                         return; // chains and loops concern internal targets only
                     }
 
-                    if ($path === RedirectPath::normalize((string) $oldPath($get), $locale)) {
+                    $source = RedirectPath::normalize((string) $oldPath($get), $locale);
+
+                    if ($source === '') {
+                        return; // no single source (the bulk modal): the save checks each row
+                    }
+
+                    // A direct self-loop, or one that closes over the existing redirects
+                    // (`b -> old` exists, `old -> b` is typed). The repository refuses it too, but
+                    // its error is keyed for the resource pages and would not reach a modal field.
+                    // The record is the redirect being edited - or, in the 404 log, a log row.
+                    $excluding = $record instanceof Redirect ? $record : null;
+
+                    if ($path === $source || app(RedirectRepository::class)->wouldLoop($locale, $source, $path, $excluding)) {
                         $fail(__('filament-redirects::redirects.validation.loop'));
                     }
                 };

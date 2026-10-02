@@ -84,4 +84,22 @@ class RedirectPathTest extends TestCase
         $this->assertSame('', RedirectPath::display('', self::OWN));
         $this->assertSame('https://other.site/x', RedirectPath::display('https://other.site/x', self::OWN));
     }
+
+    public function test_decode_gives_utf8_and_leaves_broken_sequences_alone(): void
+    {
+        $this->assertSame('привіт/світ', RedirectPath::decode('%D0%BF%D1%80%D0%B8%D0%B2%D1%96%D1%82/%D1%81%D0%B2%D1%96%D1%82'));
+        $this->assertSame('a b', RedirectPath::decode('a%20b'));
+        $this->assertSame('plain', RedirectPath::decode('plain'));
+        $this->assertSame('bad%FF', RedirectPath::decode('bad%FF'), 'not valid UTF-8 once decoded');
+    }
+
+    public function test_location_collapses_leading_slashes_and_encodes_non_ascii(): void
+    {
+        $this->assertSame('/evil.example', RedirectPath::location('//evil.example'));
+        $this->assertSame('/evil.example', RedirectPath::location('/\\evil.example'));
+        $this->assertSame('/%D0%BF?a=1', RedirectPath::location('/п?a=1'));
+        $this->assertSame('/a%0D%0Ab', RedirectPath::location("/a\r\nb"));
+        $this->assertSame('/already%20encoded', RedirectPath::location('/already%20encoded'));
+        $this->assertSame('https://other.site/%D0%BF', RedirectPath::location('https://other.site/п', internal: false));
+    }
 }

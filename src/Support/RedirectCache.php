@@ -51,7 +51,8 @@ class RedirectCache
 
         app(RedirectRepository::class)->activeRows()
             ->each(function (Redirect $redirect) use (&$map): void {
-                $map[$redirect->language.'|'.$redirect->old_path] = [
+                // Decoded: a row saved before the canon was decoded still matches.
+                $map[$redirect->language.'|'.RedirectPath::decode($redirect->old_path)] = [
                     'id' => $redirect->id,
                     'to' => $redirect->to_path,
                     'code' => $redirect->code->value,

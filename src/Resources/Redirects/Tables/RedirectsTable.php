@@ -16,6 +16,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -25,6 +26,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class RedirectsTable
 {
@@ -126,10 +128,27 @@ class RedirectsTable
      */
     private static function setActive(Collection $records, bool $active): void
     {
+        $skipped = 0;
+
         foreach ($records as $record) {
-            if ($record instanceof Redirect) {
-                app(RedirectRepository::class)->update($record, ['active' => $active]);
+            if (!$record instanceof Redirect) {
+                continue;
             }
+
+            try {
+                app(RedirectRepository::class)->update($record, ['active' => $active]);
+            } catch (ValidationException) {
+                // Activating it would close a loop with the redirects that are already active:
+                // it stays inactive, the others go on.
+                $skipped++;
+            }
+        }
+
+        if ($skipped > 0) {
+            Notification::make()
+                ->title(__('filament-redirects::redirects.actions.activate_skipped', ['count' => $skipped]))
+                ->warning()
+                ->send();
         }
     }
 

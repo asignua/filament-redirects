@@ -97,7 +97,9 @@ final class RedirectPath
             $raw = $matches[2];
         }
 
-        $path = ltrim($raw, '/');
+        // One canon for every alphabet: the DECODED path (`привіт`, not `%D0%BF...`). The request
+        // side decodes too ({@see decode()}), so a typed and a pasted address meet in the middle.
+        $path = ltrim(self::decode($raw), '/');
 
         if ($language !== Redirects::localeUrls()->unprefixed()
             && ($path === $language || str_starts_with($path, $language.'/'))) {
@@ -107,6 +109,42 @@ final class RedirectPath
         $path = trim($path, '/');
 
         return $path === '' ? Redirects::ROOT : $path;
+    }
+
+    /**
+     * A request path (or a pasted one) in the canon of the columns: percent-decoded UTF-8.
+     * `$request->path()` is the RAW, still encoded path; without decoding, a redirect typed as
+     * `привіт` would never meet a request for `/%D0%BF%D1%80...`. A sequence that does not
+     * decode to valid UTF-8 is left as it came (the database would refuse it anyway).
+     */
+    public static function decode(string $path): string
+    {
+        if (!str_contains($path, '%')) {
+            return $path;
+        }
+
+        $decoded = rawurldecode($path);
+
+        return mb_check_encoding($decoded, 'UTF-8') ? $decoded : $path;
+    }
+
+    /**
+     * A value that is safe to put into a `Location` header. Bytes outside printable ASCII (a
+     * decoded Cyrillic path, a stray CR/LF) are percent-encoded. For an internal (relative)
+     * target, any run of leading slashes and backslashes collapses into ONE slash: `//host` and
+     * `/\host` are protocol-relative to a browser and would lead off-site.
+     */
+    public static function location(string $url, bool $internal = true): string
+    {
+        if ($internal && preg_match('#^[/\\\\]#', $url) === 1) {
+            $url = '/'.ltrim($url, '/\\');
+        }
+
+        return (string) preg_replace_callback(
+            '/[^\x21-\x7E]/',
+            static fn (array $byte): string => rawurlencode($byte[0]),
+            $url,
+        );
     }
 
     /**

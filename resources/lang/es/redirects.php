@@ -47,6 +47,7 @@ return [
         'taken' => 'Ya existe una redirección para esta ruta e idioma',
         'invalid_url' => 'Introduzca una URL válida',
         'loop' => 'Se ha detectado un bucle de redirecciones',
+        'query' => 'La ruta de origen no puede contener una cadena de consulta (?) ni un fragmento (#): solo se compara la ruta',
     ],
     'filters' => [
         'used' => 'Se ha usado',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Redirección creada',
         'redirects_created' => 'Redirecciones creadas: :count',
         'redirects_skipped' => 'Omitidas: :count (bucle o ya redirigidas)',
+        'activate_skipped' => ':count siguen inactivas: activarlas cerraría un bucle de redirecciones',
         'open_on_site' => 'Abrir en el sitio',
     ],
 ];

@@ -7,6 +7,7 @@ namespace Asignua\FilamentRedirects\Repositories;
 use Asignua\FilamentRedirects\Enums\RedirectCode;
 use Asignua\FilamentRedirects\Models\Redirect;
 use Asignua\FilamentRedirects\Redirects;
+use Asignua\FilamentRedirects\Support\RedirectCache;
 use Asignua\FilamentRedirects\Support\RedirectChain;
 use Asignua\FilamentRedirects\Support\RedirectPath;
 use Illuminate\Database\Eloquent\Builder;
@@ -110,31 +111,67 @@ class RedirectRepository
         // A target on a foreign site takes part in neither chains nor entity binding.
         $external = RedirectPath::isExternal($redirect->to_path);
 
+        // The query string is never matched (the middleware looks at the path only), so a source
+        // with `?` or `#` would be saved and stay dead forever.
+        if (preg_match('/[?#]/', (string) $redirect->old_path) === 1) {
+            throw ValidationException::withMessages([
+                'data.old_path' => __('filament-redirects::redirects.validation.query'),
+            ]);
+        }
+
+        // unique(old_path, language) is in the schema: a readable error instead of SQLSTATE 23000
+        // (`Redirects::create()` has no form in front of it).
+        if ($this->oldPathTaken($language, (string) $redirect->old_path, $redirect)) {
+            throw ValidationException::withMessages([
+                'data.old_path' => __('filament-redirects::redirects.validation.taken'),
+            ]);
+        }
+
+        // A target on a foreign site takes part in neither chains nor entity binding.
+        $external = RedirectPath::isExternal($redirect->to_path);
+
         // Loop guard + flattening of the target: only for real redirects.
         $compactable = !$external && $code->isRedirect() && $redirect->to_path !== '';
 
-        if ($compactable) {
-            $this->guardAndResolve($redirect);
-        }
-
-        // Automatic binding of the destination: only while no entity is set (an explicit
-        // association is not overwritten). After flattening, so the FINAL target is linked.
-        if (!$external && $redirect->entity_id === null && $redirect->to_path !== '') {
-            $entity = Redirects::entityFor($redirect->language, $redirect->to_path);
-
-            if ($entity instanceof Model) {
-                $redirect->entity()->associate($entity);
+        // One transaction: the compaction re-points OTHER rows before this one is saved, so a
+        // failed save must take it back - otherwise those rows lead to a redirect that does not
+        // exist.
+        $redirect->getConnection()->transaction(function () use ($redirect, $external, $compactable): void {
+            if ($compactable) {
+                $this->guardAndResolve($redirect);
             }
-        }
 
-        // Collapse the chains BEFORE the save: the save then invalidates the cache once.
-        if ($compactable) {
-            $this->compactExisting($redirect);
-        }
+            // Automatic binding of the destination: only while no entity is set (an explicit
+            // association is not overwritten). After flattening, so the FINAL target is linked.
+            if (!$external && $redirect->entity_id === null && $redirect->to_path !== '') {
+                $entity = Redirects::entityFor($redirect->language, $redirect->to_path);
 
-        $redirect->save();
+                if ($entity instanceof Model) {
+                    $redirect->entity()->associate($entity);
+                }
+            }
+
+            if ($compactable) {
+                $this->compactExisting($redirect);
+            }
+
+            $redirect->save();
+        });
+
+        // The `saved` event flushed the map INSIDE the transaction; a request in between could
+        // have cached the old rows again. Flush once more after the commit.
+        app(RedirectCache::class)->flush();
 
         return $redirect;
+    }
+
+    /**
+     * Would `$oldPath -> $toPath` close a loop over the active redirects of the language? The
+     * same check the save runs, for a form rule that wants to show it on the field.
+     */
+    public function wouldLoop(string $language, string $oldPath, string $toPath, ?Model $excluding = null): bool
+    {
+        return RedirectChain::isLoop($this->activeMap($language, $excluding), $oldPath, $toPath);
     }
 
     /**
@@ -143,7 +180,7 @@ class RedirectRepository
      */
     private function guardAndResolve(Redirect $redirect): void
     {
-        $map = $this->languageMap($redirect);
+        $map = $this->activeMap($redirect->language, $redirect);
 
         if (RedirectChain::isLoop($map, $redirect->old_path, $redirect->to_path)) {
             throw ValidationException::withMessages([
@@ -161,7 +198,9 @@ class RedirectRepository
     {
         $query = $this->query()
             ->where('language', $redirect->language)
-            ->where('to_path', $redirect->old_path);
+            ->where('to_path', $redirect->old_path)
+            // The row the new target starts from would become a self-loop (`B -> B`).
+            ->where('old_path', '!=', $redirect->to_path);
 
         if ($redirect->exists) {
             $query->whereKeyNot($redirect->getKey());
@@ -175,18 +214,18 @@ class RedirectRepository
     }
 
     /**
-     * The active redirects of a language (`old_path => to_path`) without the current row.
+     * The active redirects of a language (`old_path => to_path`) without the given row.
      *
      * @return array<string, string>
      */
-    private function languageMap(Redirect $redirect): array
+    private function activeMap(string $language, ?Model $excluding): array
     {
         $query = $this->query()
-            ->where('language', $redirect->language)
+            ->where('language', $language)
             ->where('active', true);
 
-        if ($redirect->exists) {
-            $query->whereKeyNot($redirect->getKey());
+        if ($excluding instanceof Model && $excluding->exists) {
+            $query->whereKeyNot($excluding->getKey());
         }
 
         /** @var array<string, string> */

@@ -47,6 +47,7 @@ return [
         'taken' => 'Er bestaat al een omleiding voor dit pad en deze taal',
         'invalid_url' => 'Voer een geldige URL in',
         'loop' => 'Omleidingslus gedetecteerd',
+        'query' => 'Een bronpad mag geen querystring (?) of fragment (#) bevatten: alleen het pad wordt vergeleken',
     ],
     'filters' => [
         'used' => 'Is gebruikt',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Omleiding gemaakt',
         'redirects_created' => ':count omleidingen gemaakt',
         'redirects_skipped' => ':count overgeslagen (lus of al omgeleid)',
+        'activate_skipped' => ':count blijven inactief: activeren zou een redirectlus sluiten',
         'open_on_site' => 'Openen op de site',
     ],
 ];

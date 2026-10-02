@@ -6,6 +6,7 @@ namespace Asignua\FilamentRedirects\Tests\Feature;
 
 use Asignua\FilamentRedirects\Models\NotFoundEntry;
 use Asignua\FilamentRedirects\Models\Redirect;
+use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Tests\TestCase;
 use Illuminate\Database\Eloquent\MassAssignmentException;
 use Livewire\Features\SupportDisablingBackButtonCache\SupportDisablingBackButtonCache;
@@ -186,5 +187,62 @@ class FallbackMiddlewareTest extends TestCase
         $this->expectException(MassAssignmentException::class);
 
         (new Redirect)->fill(['old_path' => 'x']);
+    }
+
+    public function test_the_location_is_relative_whatever_the_host_header_says(): void
+    {
+        $this->redirect('old', 'new');
+
+        $response = $this->rawRequest('/old', headers: ['Host' => 'attacker.example', 'X-Forwarded-Host' => 'attacker.example']);
+
+        $this->assertSame('/new', $response->headers->get('Location'));
+    }
+
+    public function test_a_non_latin_source_matches_the_percent_encoded_request(): void
+    {
+        $redirect = $this->redirect('привіт/світ', 'new');
+
+        $this->rawRequest('/'.rawurlencode('привіт').'/'.rawurlencode('світ'))->assertStatus(301)->assertRedirect('/new');
+
+        $this->assertSame(1, $redirect->refresh()->hits);
+    }
+
+    public function test_a_percent_encoded_source_is_stored_decoded(): void
+    {
+        $redirect = $this->redirect('/'.rawurlencode('привіт'), 'new');
+
+        $this->assertSame('привіт', $redirect->old_path);
+    }
+
+    public function test_a_non_latin_target_is_percent_encoded_in_the_location(): void
+    {
+        $this->redirect('old', 'нова сторінка');
+
+        $this->assertSame('/'.rawurlencode('нова').'%20'.rawurlencode('сторінка'), $this->rawRequest('/old')->headers->get('Location'));
+    }
+
+    public function test_a_legacy_encoded_row_still_matches(): void
+    {
+        $redirect = $this->redirect('old', 'new');
+        Redirect::query()->whereKey($redirect->getKey())->toBase()->update(['old_path' => rawurlencode('привіт')]);
+        Redirects::flushCache();
+
+        $this->rawRequest('/'.rawurlencode('привіт'))->assertRedirect('/new');
+    }
+
+    public function test_the_404_log_stores_the_decoded_path(): void
+    {
+        $this->rawRequest('/'.rawurlencode('немає'));
+
+        $this->assertSame(['немає'], NotFoundEntry::query()->pluck('path')->all());
+    }
+
+    public function test_an_internal_target_never_becomes_protocol_relative(): void
+    {
+        $this->redirect('old', 'new');
+        Redirect::query()->toBase()->update(['to_path' => '\\evil.example']);
+        Redirects::flushCache();
+
+        $this->assertSame('/evil.example', $this->rawRequest('/old')->headers->get('Location'));
     }
 }

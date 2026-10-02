@@ -8,4 +8,4 @@
 - Write redirects only through `Redirects::create($from, $to, $status = 301, $language = null)` or `RedirectRepository` (the models have `$guarded = ['*']`; a field not assigned in the repository is silently not saved). A loop raises a `ValidationException`.
 - After a raw `DB::table('redirects')->update(...)` call `Redirects::flushCache()`; model saves and deletes flush it by themselves.
 - 404 log noise: `filament-redirects.not_found.ignore` (wildcards), `ignore_user_agents`, `ignore_bots`. Commands: `redirects:flush`, `redirects:prune`, `redirects:recheck`. Schedule: `filament-redirects.schedule.enabled` (off by default).
-- Authorization: `RedirectsPlugin::make()->authorize(fn (): bool => ...)` or define the `redirects.manage` gate.
+- Authorization: `RedirectsPlugin::make()->authorize(fn (): bool => ...)` or define the `redirects.manage` gate. Always set one: without it every panel user can point any path at an external URL.

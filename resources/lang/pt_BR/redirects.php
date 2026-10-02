@@ -47,6 +47,7 @@ return [
         'taken' => 'Já existe um redirecionamento para este caminho e idioma',
         'invalid_url' => 'Informe uma URL válida',
         'loop' => 'Loop de redirecionamento detectado',
+        'query' => 'O caminho de origem não pode conter uma query string (?) nem um fragmento (#): só o caminho é comparado',
     ],
     'filters' => [
         'used' => 'Já foi usado',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Redirecionamento criado',
         'redirects_created' => ':count redirecionamentos criados',
         'redirects_skipped' => ':count ignorados (loop ou já redirecionados)',
+        'activate_skipped' => ':count continuam inativos: ativá-los fecharia um loop de redirecionamentos',
         'open_on_site' => 'Abrir no site',
     ],
 ];

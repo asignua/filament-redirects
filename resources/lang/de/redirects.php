@@ -47,6 +47,7 @@ return [
         'taken' => 'Für diesen Pfad und diese Sprache existiert bereits eine Weiterleitung',
         'invalid_url' => 'Geben Sie eine gültige URL ein',
         'loop' => 'Weiterleitungsschleife erkannt',
+        'query' => 'Ein Quellpfad darf keinen Query-String (?) und kein Fragment (#) enthalten: verglichen wird nur der Pfad',
     ],
     'filters' => [
         'used' => 'Wurde verwendet',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Weiterleitung erstellt',
         'redirects_created' => ':count Weiterleitungen erstellt',
         'redirects_skipped' => ':count übersprungen (Schleife oder bereits weitergeleitet)',
+        'activate_skipped' => ':count bleiben inaktiv: ihre Aktivierung würde eine Weiterleitungsschleife schließen',
         'open_on_site' => 'Auf der Website öffnen',
     ],
 ];

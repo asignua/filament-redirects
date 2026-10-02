@@ -47,6 +47,7 @@ return [
         'taken' => 'Esiste già un reindirizzamento per questo percorso e questa lingua',
         'invalid_url' => 'Inserisci un URL valido',
         'loop' => 'Rilevato un ciclo di reindirizzamenti',
+        'query' => 'Il percorso di origine non può contenere una query string (?) né un frammento (#): viene confrontato solo il percorso',
     ],
     'filters' => [
         'used' => 'È stato usato',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Reindirizzamento creato',
         'redirects_created' => 'Reindirizzamenti creati: :count',
         'redirects_skipped' => 'Saltati: :count (ciclo o già reindirizzati)',
+        'activate_skipped' => ':count restano inattivi: attivarli chiuderebbe un ciclo di reindirizzamenti',
         'open_on_site' => 'Apri sul sito',
     ],
 ];

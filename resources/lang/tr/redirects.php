@@ -47,6 +47,7 @@ return [
         'taken' => 'Bu yol ve dil için zaten bir yönlendirme var',
         'invalid_url' => 'Geçerli bir URL girin',
         'loop' => 'Yönlendirme döngüsü algılandı',
+        'query' => 'Kaynak yol sorgu dizesi (?) veya parça (#) içeremez: yalnızca yol karşılaştırılır',
     ],
     'filters' => [
         'used' => 'Kullanıldı',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Yönlendirme oluşturuldu',
         'redirects_created' => ':count yönlendirme oluşturuldu',
         'redirects_skipped' => ':count atlandı (döngü veya zaten yönlendirilmiş)',
+        'activate_skipped' => ':count etkin değil kaldı: etkinleştirmek bir yönlendirme döngüsü oluştururdu',
         'open_on_site' => 'Sitede aç',
     ],
 ];

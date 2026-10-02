@@ -78,8 +78,14 @@ Register the plugin in your panel provider:
 ```php
 use Asignua\FilamentRedirects\RedirectsPlugin;
 
-$panel->plugin(RedirectsPlugin::make());
+$panel->plugin(RedirectsPlugin::make()
+    ->authorize(fn (): bool => auth()->user()?->isAdmin()));
 ```
+
+> [!WARNING]
+> **Restrict who can manage redirects.** Without `authorize()` (or a `redirects.manage` gate) *every* user who can
+> enter the panel can create a redirect from any path of your site to any external URL - an author or editor account
+> is then enough to turn your domain into a phishing redirector. See [Authorization](#authorization).
 
 Then put the middleware on your site - the next sections explain why the package cannot do that for you.
 
@@ -101,8 +107,16 @@ Add a redirect in the **Redirects** resource - or just visit a dead URL on your 
 
 ## Putting the middleware on your site
 
-`Redirects::middleware()` returns `[RedirectTrailingSlash::class, RedirectFallbackMiddleware::class]`. Both are
-**after** middleware: nothing is looked up until the request has already produced a 404.
+`Redirects::middleware()` returns `[RedirectTrailingSlash::class, RedirectFallbackMiddleware::class]`.
+
+- `RedirectFallbackMiddleware` is an **after** middleware: it looks nothing up until the request has already produced
+  a 404, so a live page is never touched.
+- `RedirectTrailingSlash` acts **before** the route, and only on a slashed `GET`/`HEAD` address (`/old/`): it looks
+  `/old` up in the cached map (and, when a row exists, asks `Redirects::resolvesUsing()` whether a live page sits
+  there) and answers with the target in one hop, short-circuiting the route. Unslashed requests pass through untouched.
+
+Both send a **relative** `Location` for an internal target, so a forged `Host` / `X-Forwarded-Host` header never ends
+up in a cached permanent redirect.
 
 For a site that serves everything through one catch-all route (a CMS front), put it on that route:
 
@@ -129,15 +143,17 @@ You do not need a locale middleware in front of them: both parse the language fr
 | A page | `shop/item` | `/shop/item` / `/en/shop/item` |
 | The home page | `/` | `/` / `/en` |
 | An external site | `https://other.site/x` (the whole URL) | `https://other.site/x` |
-| Gone | `` (empty) with code 404 | the site's own error page with `redirects.gone_status` (410) |
+| Gone | an empty string, with code 404 | the site's own error page with `redirects.gone_status` (410) |
 
 Everything is normalised on save, in one place (`RedirectRepository`), so pasting `https://site.test/en/shop/item/`
 into a field of an `en` row stores `shop/item`: our own domain (`app.url`, plus anything you add with
 `Redirects::ownUrlsUsing()`, each with its `www.` twin and port) and the row's own language prefix are stripped, a
-foreign domain is kept. The leading slash exists only in the form - the field shows `https://site.test` + `/shop` as
+foreign domain is kept. Paths are stored **percent-decoded** (`привіт`, not `%D0%BF...`) and matched against the decoded
+request path, so a redirect typed in any alphabet fires for the encoded URL a browser sends. The leading slash exists only in the form - the field shows `https://site.test` + `/shop` as
 an affix, so a redirect to the home page is typed as `/` (an empty target means Gone, not home).
 
-The form refuses spaces, a foreign host as a *source*, the home page as a source (it never 404s), a duplicate source in
+The form refuses spaces, a query string (`?`) or fragment (`#`) in a *source* (only the path is matched), a foreign
+host as a *source*, the home page as a source (it never 404s), a duplicate source in
 the same language, a source that starts with another language's prefix (it could never match), a target equal to the
 source or leading back to it, and a broken URL as a target.
 
@@ -202,7 +218,8 @@ Redirects::create('retired', '', RedirectCode::Gone);                        // 
 Redirects::create('old/page', 'new/page', entity: $post);                    // remember what it leads to
 ```
 
-It normalises, rejects a loop (`ValidationException`), collapses chains and flushes the cache. Never write the model
+It normalises, rejects a loop, a duplicate source or a source with `?`/`#` (`ValidationException`), collapses chains
+in one transaction and flushes the cache. Never write the model
 directly: it has `$guarded = ['*']`, and a field that the repository does not assign is silently not saved. If you
 must update the table with raw SQL, call `Redirects::flushCache()` afterwards.
 
@@ -239,8 +256,9 @@ RedirectsPlugin::make()
     ->notFoundLog();     // or ->notFoundLog(false)
 ```
 
-Without `authorize()` the `redirects.manage` gate decides when it is defined; otherwise everyone who can enter the
-panel can use the resources. The 404 log item follows the redirects item in the navigation.
+Without `authorize()` the `redirects.manage` gate decides when it is defined; otherwise **everyone who can enter the
+panel** can use the resources - including pointing any 404 path at an external URL. Set one of the two unless every
+panel user is trusted with that. The 404 log item follows the redirects item in the navigation.
 
 ## Commands and schedule
 
@@ -266,6 +284,7 @@ panel can use the resources. The 404 log item follows the redirects item in the 
 | `trailing_slash.canonical` | `false` | also 301 every other slashed address to its slashless form |
 | `not_found.enabled` | `true` | the 404 log |
 | `not_found.retention_days` | `90` | horizon of `redirects:prune` |
+| `not_found.max_path_length` | `191` | longer paths are not logged (the column length) |
 | `not_found.ignore` / `ignore_user_agents` / `ignore_bots` | see the file | what is never logged |
 | `schedule.enabled` / `schedule.times` | `false` | housekeeping |
 

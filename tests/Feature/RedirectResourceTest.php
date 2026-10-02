@@ -212,4 +212,39 @@ class RedirectResourceTest extends TestCase
 
         $this->assertFalse(cache()->has('filament-redirects.map'));
     }
+
+    public function test_a_source_with_a_query_or_a_fragment_is_refused(): void
+    {
+        foreach (['/old?id=5', '/page#x'] as $old) {
+            Livewire::test(CreateRedirect::class)
+                ->fillForm(['old_path' => $old, 'to_path' => '/new', 'code' => 301])
+                ->call('create')
+                ->assertHasFormErrors(['old_path'])
+                ->assertSee(__('filament-redirects::redirects.validation.query'));
+        }
+    }
+
+    public function test_a_loop_through_the_chain_is_shown_on_the_field(): void
+    {
+        $this->redirect('b', 'old');
+
+        Livewire::test(CreateRedirect::class)
+            ->fillForm(['old_path' => '/old', 'to_path' => '/b', 'code' => 301])
+            ->call('create')
+            ->assertHasFormErrors(['to_path']);
+    }
+
+    public function test_bulk_activate_skips_a_row_that_would_loop_and_says_so(): void
+    {
+        $back = $this->redirect('b', 'a', ['active' => false]);
+        $other = $this->redirect('c', 'd', ['active' => false]);
+        $this->redirect('a', 'b');
+
+        Livewire::test(ListRedirects::class)
+            ->callTableBulkAction('activate', [$back, $other])
+            ->assertNotified(__('filament-redirects::redirects.actions.activate_skipped', ['count' => 1]));
+
+        $this->assertFalse($back->refresh()->active);
+        $this->assertTrue($other->refresh()->active);
+    }
 }

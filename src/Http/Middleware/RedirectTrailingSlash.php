@@ -6,8 +6,10 @@ namespace Asignua\FilamentRedirects\Http\Middleware;
 
 use Asignua\FilamentRedirects\Enums\RedirectCode;
 use Asignua\FilamentRedirects\Redirects;
+use Asignua\FilamentRedirects\Support\RedirectPath;
 use Asignua\FilamentRedirects\Support\RedirectResolver;
 use Closure;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -42,10 +44,18 @@ class RedirectTrailingSlash
             return $next($request);
         }
 
-        $target = rtrim($path, '/');
+        $trimmed = rtrim($path, '/');
 
         // Nothing left: that was the root, the one address where a slash belongs.
-        if ($target === '') {
+        if ($trimmed === '') {
+            return $next($request);
+        }
+
+        // `//evil.example/` would become `//evil.example` - protocol-relative, i.e. off-site.
+        // Leading slashes (and backslashes, which browsers read as slashes) collapse to one.
+        $target = '/'.ltrim($trimmed, '/\\');
+
+        if ($target === '/') {
             return $next($request);
         }
 
@@ -61,12 +71,16 @@ class RedirectTrailingSlash
 
         $query = $request->getQueryString();
 
-        return redirect()->to($target.($query !== null && $query !== '' ? '?'.$query : ''), 301);
+        // A relative Location: the request's Host header never shapes the target.
+        return new RedirectResponse(
+            RedirectPath::location($target.($query !== null && $query !== '' ? '?'.$query : '')),
+            301,
+        );
     }
 
     private function redirectFromTable(string $target, Request $request): ?Response
     {
-        [$language, $path] = Redirects::localeUrls()->parse($target);
+        [$language, $path] = Redirects::localeUrls()->parse(RedirectPath::decode($target));
 
         $entry = $this->redirects->find($language, $path);
 

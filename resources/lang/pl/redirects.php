@@ -47,6 +47,7 @@ return [
         'taken' => 'Przekierowanie dla tej ścieżki i języka już istnieje',
         'invalid_url' => 'Wpisz poprawny adres URL',
         'loop' => 'Wykryto pętlę przekierowań',
+        'query' => 'Ścieżka źródłowa nie może zawierać ciągu zapytania (?) ani fragmentu (#): porównywana jest tylko ścieżka',
     ],
     'filters' => [
         'used' => 'Było używane',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Utworzono przekierowanie',
         'redirects_created' => 'Utworzone przekierowania: :count',
         'redirects_skipped' => 'Pominięte: :count (pętla lub już przekierowane)',
+        'activate_skipped' => ':count pozostało nieaktywnych: ich włączenie zamknęłoby pętlę przekierowań',
         'open_on_site' => 'Otwórz w witrynie',
     ],
 ];

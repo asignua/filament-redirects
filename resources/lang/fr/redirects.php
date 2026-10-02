@@ -47,6 +47,7 @@ return [
         'taken' => 'Une redirection existe déjà pour ce chemin et cette langue',
         'invalid_url' => 'Saisissez une URL valide',
         'loop' => 'Boucle de redirections détectée',
+        'query' => 'Le chemin source ne peut pas contenir de chaîne de requête (?) ni de fragment (#) : seul le chemin est comparé',
     ],
     'filters' => [
         'used' => 'A été utilisée',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Redirection créée',
         'redirects_created' => ':count redirections créées',
         'redirects_skipped' => ':count ignorées (boucle ou déjà redirigées)',
+        'activate_skipped' => ':count restent inactives : les activer fermerait une boucle de redirections',
         'open_on_site' => 'Ouvrir sur le site',
     ],
 ];

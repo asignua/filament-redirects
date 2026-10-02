@@ -47,6 +47,7 @@ return [
         'taken' => 'A redirect for this path and language already exists',
         'invalid_url' => 'Enter a valid URL',
         'loop' => 'Redirect loop detected',
+        'query' => 'A source path cannot contain a query string (?) or a fragment (#): only the path is matched',
     ],
     'filters' => [
         'used' => 'Has been used',
@@ -72,6 +73,7 @@ return [
         'redirect_created' => 'Redirect created',
         'redirects_created' => ':count redirects created',
         'redirects_skipped' => ':count skipped (loop or already redirected)',
+        'activate_skipped' => ':count left inactive: activating them would close a redirect loop',
         'open_on_site' => 'Open on the site',
     ],
 ];

@@ -16,3 +16,8 @@ All notable changes to `asignua/filament-redirects` are documented here.
 - `RedirectsPlugin`: `authorize()`, the `redirects.manage` gate, navigation group, sort and icon, each resource switchable.
 - Translations: English, Ukrainian, German, Spanish, French, Italian, Dutch, Polish, Brazilian Portuguese and Turkish.
 - Laravel Boost guidelines.
+- Security (pre-release review): an internal redirect and the canonical trailing-slash redirect send a **relative** `Location` (no longer absolutised from the request's `Host`), and leading `//` or `/\` collapse to one slash, so `//evil.example/` can no longer become an off-site 301. Bytes outside printable ASCII in a `Location` are percent-encoded.
+- Paths are stored and matched **percent-decoded**: a redirect typed as `привіт` fires for `/%D0%BF...`, and the 404 log shows readable paths. Rows stored encoded still match.
+- A redirect is saved in one transaction with the chain compaction (a failed save no longer leaves other rows re-pointed), compaction never turns `B -> A` into `B -> B`, and a duplicate source or a source with `?`/`#` is refused with a `ValidationException` instead of a SQL error.
+- A loop through existing redirects is shown on the target field (404-log modal included); bulk "Activate" skips a row that would loop and reports it.
+- The 404 log links a path to the site only when a base URL is known; the `statusUsing()` hook is called once per row.

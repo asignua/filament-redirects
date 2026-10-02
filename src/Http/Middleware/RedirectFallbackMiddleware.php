@@ -6,6 +6,7 @@ namespace Asignua\FilamentRedirects\Http\Middleware;
 
 use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Support\NotFoundLog;
+use Asignua\FilamentRedirects\Support\RedirectPath;
 use Asignua\FilamentRedirects\Support\RedirectResolver;
 use Closure;
 use Illuminate\Http\Request;
@@ -34,7 +35,8 @@ class RedirectFallbackMiddleware
             return $response;
         }
 
-        [$language, $oldPath] = Redirects::localeUrls()->parse($request->path());
+        // The path is matched DECODED: `/%D0%BF...` must find the row typed as `привіт`.
+        [$language, $oldPath] = Redirects::localeUrls()->parse(RedirectPath::decode($request->path()));
 
         if ($oldPath === '') {
             return $response;

@@ -36,6 +36,18 @@ class NotFoundTable
     {
         $multilingual = fn (): bool => count(Redirects::localeUrls()->all()) > 1;
 
+        // The status hook is asked ONCE per row: the badge needs both the label and the colour.
+        $statuses = [];
+        $status = static function (NotFoundEntry $record) use (&$statuses): ?array {
+            $key = (string) $record->getKey();
+
+            if (!array_key_exists($key, $statuses)) {
+                $statuses[$key] = Redirects::statusFor($record->path, $record->language);
+            }
+
+            return $statuses[$key];
+        };
+
         return $table
             ->columns([
                 // The path is stored WITHOUT the language prefix, so the link is built the way
@@ -47,7 +59,11 @@ class NotFoundTable
                     ->searchable()
                     ->wrap()
                     ->sortable()
-                    ->url(fn (NotFoundEntry $record): string => Redirects::localeUrls()->url($record->language, $record->path, true))
+                    // No link without a base URL: `''.'/'.$path` with a logged `\evil.example` would be
+                    // `/\evil.example`, which a browser reads as `//evil.example`.
+                    ->url(fn (NotFoundEntry $record): ?string => Redirects::baseUrl() === ''
+                        ? null
+                        : Redirects::localeUrls()->url($record->language, $record->path, true))
                     ->openUrlInNewTab()
                     ->tooltip(__('filament-redirects::redirects.actions.open_on_site')),
                 TextColumn::make('language')
@@ -57,8 +73,8 @@ class NotFoundTable
                 TextColumn::make('status')
                     ->label(__('filament-redirects::redirects.fields.status'))
                     ->badge()
-                    ->state(fn (NotFoundEntry $record): ?string => Redirects::statusFor($record->path, $record->language)['label'] ?? null)
-                    ->color(fn (NotFoundEntry $record): string => Redirects::statusFor($record->path, $record->language)['color'] ?? 'gray')
+                    ->state(fn (NotFoundEntry $record): ?string => $status($record)['label'] ?? null)
+                    ->color(fn (NotFoundEntry $record): string => $status($record)['color'] ?? 'gray')
                     ->placeholder('—')
                     ->visible(fn (): bool => Redirects::hasStatusHook()),
                 TextColumn::make('hits')
@@ -163,7 +179,7 @@ class NotFoundTable
                 'code' => RedirectCode::Permanent->value,
                 'active' => true,
             ])
-            ->action(function (NotFoundEntry $record, array $data): void {
+            ->action(function (NotFoundEntry $record, array $data, Action $action): void {
                 $repository = app(RedirectRepository::class);
 
                 if ($repository->oldPathTaken($record->language, RedirectPath::normalize($record->path, $record->language), null)) {
@@ -178,13 +194,23 @@ class NotFoundTable
                     return;
                 }
 
-                $repository->create([
-                    'old_path' => $record->path,
-                    'to_path' => (string) $data['to_path'],
-                    'language' => $record->language,
-                    'code' => (int) $data['code'],
-                    'active' => (bool) ($data['active'] ?? true),
-                ]);
+                try {
+                    $repository->create([
+                        'old_path' => $record->path,
+                        'to_path' => (string) $data['to_path'],
+                        'language' => $record->language,
+                        'code' => (int) $data['code'],
+                        'active' => (bool) ($data['active'] ?? true),
+                    ]);
+                } catch (ValidationException $exception) {
+                    // The repository keys its errors for the resource pages (`data.to_path`),
+                    // which match no field of this modal: say it out loud and keep the modal open.
+                    // (A loop is normally caught by the field rule; this is the race backstop.)
+                    self::refused($exception);
+                    $action->halt();
+
+                    return;
+                }
 
                 $record->delete();
 
@@ -267,5 +293,13 @@ class NotFoundTable
                 $notification->send();
             })
             ->deselectRecordsAfterCompletion();
+    }
+
+    private static function refused(ValidationException $exception): void
+    {
+        Notification::make()
+            ->title((string) (collect($exception->errors())->flatten()->first() ?? $exception->getMessage()))
+            ->danger()
+            ->send();
     }
 }
