@@ -55,7 +55,7 @@ class RedirectFallbackMiddleware
             return $response;
         }
 
-        $redirect = $this->redirects->respond($entry, $language, $request->getQueryString());
+        $redirect = $this->redirects->respond($entry, $language, $request->getQueryString(), $request->getBaseUrl());
 
         if ($redirect !== null) {
             return $redirect;

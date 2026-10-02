@@ -131,4 +131,40 @@ class TrailingSlashTest extends TestCase
 
         return TestResponse::fromBaseResponse($response);
     }
+
+    public function test_a_subdirectory_install_keeps_its_base_path_in_the_location(): void
+    {
+        config()->set('filament-redirects.trailing_slash.canonical', true);
+        $this->redirect('old', 'new');
+
+        $this->assertSame('/sub/new', $this->subdirectoryRequest('/sub/old/')->headers->get('Location'));
+        $this->assertSame('/sub/nope', $this->subdirectoryRequest('/sub/nope/')->headers->get('Location'));
+    }
+
+    public function test_a_subdirectory_install_keeps_its_base_path_on_a_404_fallback(): void
+    {
+        $this->redirect('old', 'new');
+
+        $response = $this->subdirectoryRequest('/sub/old');
+
+        $this->assertSame(301, $response->getStatusCode());
+        $this->assertSame('/sub/new', $response->headers->get('Location'));
+    }
+
+    private function subdirectoryRequest(string $uri): TestResponse
+    {
+        // An app served under `/sub` (front controller /sub/index.php): the base URL comes from
+        // the script path, the path info is relative to it.
+        $request = Request::create('http://localhost'.$uri, 'GET', server: [
+            'SCRIPT_NAME' => '/sub/index.php',
+            'SCRIPT_FILENAME' => '/var/www/sub/index.php',
+            'PHP_SELF' => '/sub/index.php',
+        ]);
+
+        $kernel = $this->app->make(Kernel::class);
+        $response = $kernel->handle($request);
+        $kernel->terminate($request, $response);
+
+        return TestResponse::fromBaseResponse($response);
+    }
 }

@@ -82,7 +82,19 @@ class RedirectRepository
         // "Create redirect" action of the 404 log, `Redirects::create()`): otherwise a host or
         // a language prefix leaks into the column through whichever path forgot to clean it.
         if (array_key_exists('old_path', $data)) {
-            $redirect->old_path = RedirectPath::normalize((string) $data['old_path'], $language);
+            $rawOldPath = (string) $data['old_path'];
+
+            // The query string is never matched (the middleware looks at the path only), so a
+            // source with `?` or `#` would be saved and stay dead forever. Checked on the RAW
+            // input: an encoded `%3F` / `%23` is a real path character (a request for
+            // `/what%3F` matches `what?`) and must stay allowed - see RedirectPath::escape().
+            if (preg_match('/[?#]/', $rawOldPath) === 1) {
+                throw ValidationException::withMessages([
+                    'data.old_path' => __('filament-redirects::redirects.validation.query'),
+                ]);
+            }
+
+            $redirect->old_path = RedirectPath::normalize($rawOldPath, $language);
         }
 
         if (array_key_exists('to_path', $data)) {
@@ -97,6 +109,10 @@ class RedirectRepository
             $redirect->active = (bool) $data['active'];
         }
 
+        // A new redirect without the flag is active (the column default, but the model must know
+        // it too: the compaction below depends on it).
+        $redirect->active = (bool) ($redirect->getAttribute('active') ?? true);
+
         // A new redirect without a type is permanent (the column default, but the model must
         // know it too: it is not refreshed after the insert).
         $code = $redirect->getAttribute('code') ?? RedirectCode::Permanent;
@@ -106,17 +122,6 @@ class RedirectRepository
         // the cache and the table never show a target that is not served.
         if (!$code->isRedirect()) {
             $redirect->to_path = '';
-        }
-
-        // A target on a foreign site takes part in neither chains nor entity binding.
-        $external = RedirectPath::isExternal($redirect->to_path);
-
-        // The query string is never matched (the middleware looks at the path only), so a source
-        // with `?` or `#` would be saved and stay dead forever.
-        if (preg_match('/[?#]/', (string) $redirect->old_path) === 1) {
-            throw ValidationException::withMessages([
-                'data.old_path' => __('filament-redirects::redirects.validation.query'),
-            ]);
         }
 
         // unique(old_path, language) is in the schema: a readable error instead of SQLSTATE 23000
@@ -130,8 +135,12 @@ class RedirectRepository
         // A target on a foreign site takes part in neither chains nor entity binding.
         $external = RedirectPath::isExternal($redirect->to_path);
 
-        // Loop guard + flattening of the target: only for real redirects.
-        $compactable = !$external && $code->isRedirect() && $redirect->to_path !== '';
+        // Loop guard + flattening of the target: only for real, ACTIVE redirects. An inactive
+        // draft `b -> c` must not re-point a live `a -> b` (the visitor would follow a rule that
+        // was never turned on, and switching the draft off would not undo it); the loop and
+        // resolve logic sees only active rows too, so both sides agree. Activating the draft
+        // later goes through update() and compacts then.
+        $compactable = $redirect->active && !$external && $code->isRedirect() && $redirect->to_path !== '';
 
         // One transaction: the compaction re-points OTHER rows before this one is saved, so a
         // failed save must take it back - otherwise those rows lead to a redirect that does not

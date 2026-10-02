@@ -8,6 +8,7 @@ use Asignua\FilamentRedirects\Enums\RedirectCode;
 use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Repositories\RedirectRepository;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Livewire\Features\SupportDisablingBackButtonCache\SupportDisablingBackButtonCache;
 
 /**
@@ -43,8 +44,11 @@ class RedirectResolver
      * call it exactly once per request.
      *
      * @param array{id: int, to: string, code: int} $entry
+     * @param string|null                           $basePath the path the app is served under
+     *                                                        (`/sub`), null = the current
+     *                                                        request's {@see Request::getBaseUrl()}
      */
-    public function respond(array $entry, string $language, ?string $query = null): ?RedirectResponse
+    public function respond(array $entry, string $language, ?string $query = null, ?string $basePath = null): ?RedirectResponse
     {
         // A query-builder increment: it fires no model events, so the cache is not flushed.
         app(RedirectRepository::class)->incrementHits($entry['id']);
@@ -60,7 +64,7 @@ class RedirectResolver
         $external = RedirectPath::isExternal($entry['to']);
         $target = $external
             ? $entry['to']
-            : Redirects::localeUrls()->url($language, $entry['to'], false);
+            : self::basePath($basePath).Redirects::localeUrls()->url($language, $entry['to'], false);
 
         if (!$external && $query !== null && $query !== '' && (bool) config('filament-redirects.redirects.preserve_query', false)) {
             $target .= (str_contains($target, '?') ? '&' : '?').$query;
@@ -96,5 +100,20 @@ class RedirectResolver
         }
 
         return $redirect;
+    }
+
+    /**
+     * The prefix of a relative internal `Location`: the path the app is served under (`/sub` for
+     * an install in a subdirectory, '' at the root). It comes from the request's script path
+     * (SCRIPT_NAME / REQUEST_URI), never from the `Host` header, so it cannot be forged into an
+     * off-site target; any leading slashes still collapse in {@see RedirectPath::location()}.
+     */
+    public static function basePath(?string $basePath = null): string
+    {
+        if ($basePath === null) {
+            $basePath = app()->bound('request') ? app(Request::class)->getBaseUrl() : '';
+        }
+
+        return rtrim($basePath, '/');
     }
 }

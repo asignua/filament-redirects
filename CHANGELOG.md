@@ -21,3 +21,6 @@ All notable changes to `asignua/filament-redirects` are documented here.
 - A redirect is saved in one transaction with the chain compaction (a failed save no longer leaves other rows re-pointed), compaction never turns `B -> A` into `B -> B`, and a duplicate source or a source with `?`/`#` is refused with a `ValidationException` instead of a SQL error.
 - A loop through existing redirects is shown on the target field (404-log modal included); bulk "Activate" skips a row that would loop and reports it.
 - The 404 log links a path to the site only when a base URL is known; the `statusUsing()` hook is called once per row.
+- Only an ACTIVE redirect compacts chains: an inactive draft `b -> c` no longer re-points a live `a -> b`; switching it on does.
+- A relative `Location` keeps the app's base path (an install under `/sub` redirects to `/sub/new`, not `/new`); `RedirectResolver::respond()` takes an optional `$basePath`.
+- `?`/`#` are refused only when typed literally in a source: an encoded `%3F`/`%23` is a real path character, so a 404-log row such as `what?` can become a redirect.

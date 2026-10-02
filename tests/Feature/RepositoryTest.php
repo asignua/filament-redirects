@@ -204,4 +204,38 @@ class RepositoryTest extends TestCase
         $this->assertTrue($repository->wouldLoop('en', 'old', 'b'));
         $this->assertFalse($repository->wouldLoop('en', 'old', 'c'));
     }
+
+    public function test_an_inactive_draft_does_not_re_point_an_active_redirect(): void
+    {
+        $live = Redirects::create('a', 'b');
+        $draft = Redirects::create('b', 'c', active: false);
+
+        $this->assertSame('b', $live->refresh()->to_path, 'an inactive b -> c leaves a -> b alone');
+        $this->assertSame('c', $draft->to_path);
+
+        app(RedirectRepository::class)->update($draft, ['active' => true]);
+
+        $this->assertSame('c', $live->refresh()->to_path, 'switching the draft on compacts the chain');
+    }
+
+    public function test_bulk_deactivation_does_not_compact(): void
+    {
+        $live = Redirects::create('a', 'b');
+        $other = Redirects::create('x', 'y');
+        $draft = Redirects::create('b', 'c', active: false);
+
+        app(RedirectRepository::class)->update($other, ['active' => false]);
+        app(RedirectRepository::class)->update($draft, ['active' => false]);
+
+        $this->assertSame('b', $live->refresh()->to_path);
+    }
+
+    public function test_an_encoded_query_or_fragment_character_is_a_valid_source(): void
+    {
+        $redirect = Redirects::create('/what%3F', 'new');
+        $hash = Redirects::create('/c%23', 'new');
+
+        $this->assertSame('what?', $redirect->old_path);
+        $this->assertSame('c#', $hash->old_path);
+    }
 }

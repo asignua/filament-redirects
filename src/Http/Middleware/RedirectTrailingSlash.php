@@ -71,9 +71,10 @@ class RedirectTrailingSlash
 
         $query = $request->getQueryString();
 
-        // A relative Location: the request's Host header never shapes the target.
+        // A relative Location: the request's Host header never shapes the target. The base path
+        // (an install under `/sub`) is not part of getPathInfo() and goes back in front.
         return new RedirectResponse(
-            RedirectPath::location($target.($query !== null && $query !== '' ? '?'.$query : '')),
+            RedirectPath::location(RedirectResolver::basePath($request->getBaseUrl()).$target.($query !== null && $query !== '' ? '?'.$query : '')),
             301,
         );
     }
@@ -94,6 +95,6 @@ class RedirectTrailingSlash
             return null;
         }
 
-        return $this->redirects->respond($entry, $language, $request->getQueryString());
+        return $this->redirects->respond($entry, $language, $request->getQueryString(), $request->getBaseUrl());
     }
 }

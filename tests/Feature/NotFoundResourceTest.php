@@ -205,4 +205,28 @@ class NotFoundResourceTest extends TestCase
         Livewire::test(ListNotFound::class)
             ->assertTableColumnExists('path', fn (TextColumn $column): bool => $column->getUrl() === null, $entry);
     }
+
+    public function test_a_logged_path_with_a_decoded_question_mark_can_become_a_redirect(): void
+    {
+        $entry = $this->logEntry('what?', 'en');
+
+        Livewire::test(ListNotFound::class)
+            ->callTableAction('create_redirect', $entry, data: ['to_path' => '/new', 'code' => 301, 'active' => true])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame('what?', Redirect::query()->firstOrFail()->old_path);
+        $this->assertSame(0, NotFoundEntry::query()->count());
+
+        $this->rawRequest('/what%3F')->assertRedirect('/new');
+    }
+
+    public function test_the_bulk_action_turns_a_decoded_question_mark_path_into_a_redirect(): void
+    {
+        $entry = $this->logEntry('what?', 'en');
+
+        Livewire::test(ListNotFound::class)
+            ->callTableBulkAction('create_redirects', [$entry], data: ['to_path' => '/shop', 'code' => 301]);
+
+        $this->assertSame('what?', Redirect::query()->firstOrFail()->old_path);
+    }
 }

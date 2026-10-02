@@ -129,6 +129,16 @@ final class RedirectPath
     }
 
     /**
+     * The inverse of {@see decode()} for the characters that mean something in a URL: a stored
+     * (decoded) path such as `what?` (the request was `/what%3F`) is turned back into input that
+     * {@see normalize()} reads as the same path, instead of as a path with a query string.
+     */
+    public static function escape(string $path): string
+    {
+        return strtr($path, ['%' => '%25', '?' => '%3F', '#' => '%23']);
+    }
+
+    /**
      * A value that is safe to put into a `Location` header. Bytes outside printable ASCII (a
      * decoded Cyrillic path, a stray CR/LF) are percent-encoded. For an internal (relative)
      * target, any run of leading slashes and backslashes collapses into ONE slash: `//host` and

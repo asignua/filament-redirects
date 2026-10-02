@@ -196,7 +196,9 @@ class NotFoundTable
 
                 try {
                     $repository->create([
-                        'old_path' => $record->path,
+                        // The log stores the DECODED path: escape it, so a real `what?`
+                        // (requested as `/what%3F`) is not read as a query string.
+                        'old_path' => RedirectPath::escape($record->path),
                         'to_path' => (string) $data['to_path'],
                         'language' => $record->language,
                         'code' => (int) $data['code'],
@@ -265,14 +267,16 @@ class NotFoundTable
 
                     try {
                         $repository->create([
-                            'old_path' => $record->path,
+                            // The log stores the DECODED path: escape it, so a real `what?`
+                            // (requested as `/what%3F`) is not read as a query string.
+                            'old_path' => RedirectPath::escape($record->path),
                             'to_path' => (string) $data['to_path'],
                             'language' => $record->language,
                             'code' => (int) $data['code'],
                             'active' => true,
                         ]);
                     } catch (ValidationException) {
-                        $skipped++; // a loop: the target is the path itself or leads back to it
+                        $skipped++; // refused by the repository (a loop: the target is the path itself or leads back to it)
 
                         continue;
                     }
