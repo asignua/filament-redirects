@@ -1,0 +1,153 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Asignua\FilamentRedirects\Tests\Feature;
+
+use Asignua\FilamentRedirects\Enums\RedirectCode;
+use Asignua\FilamentRedirects\Models\Redirect;
+use Asignua\FilamentRedirects\Redirects;
+use Asignua\FilamentRedirects\Repositories\RedirectRepository;
+use Asignua\FilamentRedirects\Tests\TestCase;
+use Illuminate\Database\QueryException;
+use Illuminate\Validation\ValidationException;
+use Workbench\App\Models\Post;
+
+class RepositoryTest extends TestCase
+{
+    public function test_create_normalises_the_paths(): void
+    {
+        $redirect = Redirects::create('https://site.test/Old/Page/', '/new/page/', 302);
+
+        $this->assertSame('Old/Page', $redirect->old_path);
+        $this->assertSame('new/page', $redirect->to_path);
+        $this->assertSame(RedirectCode::Temporary, $redirect->code);
+        $this->assertSame('en', $redirect->language);
+        $this->assertTrue($redirect->active);
+    }
+
+    public function test_the_row_own_language_prefix_is_stripped_and_a_foreign_one_stays(): void
+    {
+        $this->twoLanguages();
+
+        $own = Redirects::create('/en/old', '/en/new', language: 'en');
+        $foreign = Redirects::create('/old2', '/en/new', language: 'uk');
+
+        $this->assertSame(['old', 'new'], [$own->old_path, $own->to_path]);
+        $this->assertSame(['old2', 'en/new'], [$foreign->old_path, $foreign->to_path]);
+    }
+
+    public function test_an_external_target_stays_a_whole_url(): void
+    {
+        $redirect = Redirects::create('partner', 'https://other.site/x');
+
+        $this->assertSame('https://other.site/x', $redirect->to_path);
+    }
+
+    public function test_the_home_page_is_a_slash(): void
+    {
+        $this->assertSame('/', Redirects::create('start', '/')->to_path);
+        $this->assertSame('/', Redirects::create('start2', 'https://site.test')->to_path);
+    }
+
+    public function test_gone_drops_the_target(): void
+    {
+        $redirect = Redirects::create('old', 'whatever', RedirectCode::Gone);
+
+        $this->assertSame('', $redirect->to_path);
+    }
+
+    public function test_a_self_loop_is_rejected(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        Redirects::create('a', '/a/');
+    }
+
+    public function test_a_loop_through_the_chain_is_rejected(): void
+    {
+        Redirects::create('b', 'c');
+        Redirects::create('c', 'a');
+
+        $this->expectException(ValidationException::class);
+
+        Redirects::create('a', 'b');
+    }
+
+    public function test_the_target_is_flattened_to_the_end_of_the_chain(): void
+    {
+        Redirects::create('b', 'c');
+
+        $this->assertSame('c', Redirects::create('a', 'b')->to_path);
+    }
+
+    public function test_existing_redirects_into_a_new_source_are_re_pointed_to_its_target(): void
+    {
+        $first = Redirects::create('a', 'b');
+        Redirects::create('b', 'c');
+
+        $this->assertSame('c', $first->refresh()->to_path, 'a -> b -> c is stored as a -> c');
+    }
+
+    public function test_chains_are_per_language(): void
+    {
+        $this->twoLanguages();
+        Redirects::create('b', 'c', language: 'en');
+
+        $this->assertSame('b', Redirects::create('a', 'b', language: 'uk')->to_path);
+    }
+
+    public function test_an_external_target_is_not_flattened(): void
+    {
+        Redirects::create('b', 'c');
+
+        $this->assertSame('https://other.site/b', Redirects::create('a', 'https://other.site/b')->to_path);
+    }
+
+    public function test_an_entity_can_be_given_or_found(): void
+    {
+        $post = Post::query()->create(['slug' => 'new']);
+        $explicit = Redirects::create('old', 'new', entity: $post);
+
+        $this->assertTrue($post->is($explicit->entity));
+
+        Redirects::entityUsing(fn (string $language, string $path): ?Post => Post::query()->where('slug', $path)->first());
+        $found = Redirects::create('old2', 'new');
+
+        $this->assertTrue($post->is($found->entity));
+    }
+
+    public function test_update_keeps_the_language_and_renormalises(): void
+    {
+        $this->twoLanguages();
+        $redirect = Redirects::create('old', 'new', language: 'en');
+
+        app(RedirectRepository::class)->update($redirect, ['to_path' => '/en/other']);
+
+        $this->assertSame('other', $redirect->refresh()->to_path);
+        $this->assertSame('en', $redirect->language);
+    }
+
+    public function test_the_source_is_unique_per_language(): void
+    {
+        $this->twoLanguages();
+        Redirects::create('old', 'new', language: 'uk');
+        Redirects::create('old', 'new', language: 'en');
+
+        $this->assertTrue(app(RedirectRepository::class)->oldPathTaken('uk', 'old', null));
+        $this->assertFalse(app(RedirectRepository::class)->oldPathTaken('uk', 'other', null));
+
+        $this->expectException(QueryException::class);
+
+        Redirects::create('old', 'newer', language: 'uk');
+    }
+
+    public function test_the_table_name_is_configurable(): void
+    {
+        $this->assertSame('redirects', (new Redirect)->getTable());
+
+        config()->set('filament-redirects.tables.redirects', 'my_redirects');
+
+        $this->assertSame('my_redirects', (new Redirect)->getTable());
+    }
+}

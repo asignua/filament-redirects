@@ -1,0 +1,44 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * The 404 log: an unmatched (path, language) with a hit counter. `created_at` is "first seen";
+ * `last_seen_at` drives sorting and pruning. `referrer` and `user_agent` (a coarse family such
+ * as "Googlebot" or "Chrome") are samples of the latest request that sent them.
+ */
+return new class extends Migration
+{
+    private function table(): string
+    {
+        return (string) config('filament-redirects.tables.not_found', 'not_found_log');
+    }
+
+    public function up(): void
+    {
+        Schema::create($this->table(), function (Blueprint $table): void {
+            $table->id();
+            $table->string('path', 191);
+            $table->string('language', 8);
+            $table->unsignedInteger('hits')->default(1);
+            $table->string('referrer', 191)->nullable();
+            $table->string('user_agent', 40)->nullable();
+            $table->boolean('is_bot')->default(false);
+            $table->timestamp('last_seen_at');
+            $table->timestamps();
+
+            $table->unique(['path', 'language']);
+            $table->index('last_seen_at');
+            $table->index('hits');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists($this->table());
+    }
+};
