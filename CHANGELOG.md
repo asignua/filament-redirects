@@ -2,7 +2,7 @@
 
 All notable changes to `asignua/filament-redirects` are documented here.
 
-## v1.0.0 - unreleased
+## v1.0.0 - 2026-10-03
 
 - Redirect manager: 301, 302, 307, 308 and "Gone" (the 404 stays a 404), an active flag, a hit counter and a last-hit time, an optional language per row, `unique(source, language)`.
 - Fallback middleware that only acts on a 404 (GET and HEAD), with a cached map, a bounded `Cache-Control` on permanent redirects and an opt-in query-string pass-through.
