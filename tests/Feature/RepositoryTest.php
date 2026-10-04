@@ -238,4 +238,54 @@ class RepositoryTest extends TestCase
         $this->assertSame('what?', $redirect->old_path);
         $this->assertSame('c#', $hash->old_path);
     }
+
+    public function test_a_temporary_redirect_does_not_re_point_permanent_ones(): void
+    {
+        $promo = Redirects::create('old-promo', 'shop');
+        $legacy = Redirects::create('legacy', 'shop', RedirectCode::PermanentKeepMethod);
+
+        Redirects::create('shop', 'sale-2026', RedirectCode::Temporary);
+        Redirects::create('shop2', 'x', RedirectCode::TemporaryKeepMethod);
+
+        $this->assertSame('shop', $promo->refresh()->to_path, 'a 302 shop -> sale-2026 leaves old-promo -> shop alone');
+        $this->assertSame('shop', $legacy->refresh()->to_path);
+    }
+
+    public function test_a_permanent_redirect_is_not_flattened_through_a_temporary_one(): void
+    {
+        Redirects::create('b', 'c', RedirectCode::Temporary);
+        Redirects::create('y', 'z', RedirectCode::TemporaryKeepMethod);
+
+        $this->assertSame('b', Redirects::create('a', 'b')->to_path);
+        $this->assertSame('y', Redirects::create('x', 'y')->to_path);
+    }
+
+    public function test_a_temporary_redirect_is_flattened_through_permanent_ones(): void
+    {
+        Redirects::create('b', 'c');
+
+        $this->assertSame('c', Redirects::create('a', 'b', RedirectCode::Temporary)->to_path);
+    }
+
+    public function test_a_loop_through_a_temporary_redirect_is_still_rejected(): void
+    {
+        Redirects::create('b', 'a', RedirectCode::Temporary);
+
+        $this->expectException(ValidationException::class);
+
+        Redirects::create('a', 'b');
+    }
+
+    public function test_a_redirect_into_a_gone_source_keeps_its_target(): void
+    {
+        Redirects::create('b', '', RedirectCode::Gone);
+        $into = Redirects::create('x', 'a');
+
+        $redirect = Redirects::create('a', 'b');
+
+        $this->assertSame('b', $redirect->to_path, 'a 301 into a Gone source is not flattened to the home page');
+        $this->assertSame(RedirectCode::Permanent, $redirect->code);
+        $this->assertSame('b', $into->refresh()->to_path);
+        $this->assertFalse(app(RedirectRepository::class)->wouldLoop('en', 'c', 'b'));
+    }
 }

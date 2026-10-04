@@ -294,6 +294,9 @@ panel user is trusted with that. The 404 log item follows the redirects item in 
   when it is not running; `hits` staying at 0 will.
 - **One hop only.** Chains are collapsed when a redirect is *saved* (saving `B -> C` re-points the existing `A -> B` to
   `A -> C`). Do not add hop-following to the middleware: it would cost a query per hop on every 404, scanners included.
+  Only **permanent** rows (301/308) take part in that: a temporary `B -> C` (302/307) never re-points other rows, and a
+  new redirect is not flattened through it, so removing a campaign 302 leaves the permanent rows as they were. A
+  redirect into a "Gone" source keeps its target (the Gone row answers). Loops are refused through any active redirect.
 - **A redirect never wins over a real page.** It is a fallback for a 404: a row whose source is a live URL is inert.
   `/old/` follows the same rule when `resolvesUsing()` is set.
 - **Browsers cache a 301 (and 308) forever**, so a later edit (a new target, "Gone") never reaches a visitor who

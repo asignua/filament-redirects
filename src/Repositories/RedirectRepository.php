@@ -142,10 +142,16 @@ class RedirectRepository
         // later goes through update() and compacts then.
         $compactable = $redirect->active && !$external && $code->isRedirect() && $redirect->to_path !== '';
 
+        // Only a PERMANENT rule may rewrite other rows: a temporary 302/307 `b -> c` re-pointing
+        // the existing 301 `a -> b` would turn a campaign into permanent data that removing the
+        // 302 never restores. A temporary row is still loop-checked and flattened (through
+        // permanent rows only - see guardAndResolve()).
+        $compactExisting = $compactable && $code->isPermanent();
+
         // One transaction: the compaction re-points OTHER rows before this one is saved, so a
         // failed save must take it back - otherwise those rows lead to a redirect that does not
         // exist.
-        $redirect->getConnection()->transaction(function () use ($redirect, $external, $compactable): void {
+        $redirect->getConnection()->transaction(function () use ($redirect, $external, $compactable, $compactExisting): void {
             if ($compactable) {
                 $this->guardAndResolve($redirect);
             }
@@ -160,7 +166,7 @@ class RedirectRepository
                 }
             }
 
-            if ($compactable) {
+            if ($compactExisting) {
                 $this->compactExisting($redirect);
             }
 
@@ -184,8 +190,10 @@ class RedirectRepository
     }
 
     /**
-     * A manual redirect A -> B: reject a loop and flatten the target to the final one along
-     * the chain of active redirects of the same language.
+     * A manual redirect A -> B: reject a loop (through ANY active redirect - a loop over a 302
+     * is still a loop) and flatten the target to the final one along the chain of active
+     * PERMANENT redirects of the same language. A temporary hop stays a hop: flattening
+     * through it would bake a campaign target into a permanent row.
      */
     private function guardAndResolve(Redirect $redirect): void
     {
@@ -197,7 +205,10 @@ class RedirectRepository
             ]);
         }
 
-        $redirect->to_path = RedirectChain::resolve($map, $redirect->to_path);
+        $redirect->to_path = RedirectChain::resolve(
+            $this->activeMap($redirect->language, $redirect, permanentOnly: true),
+            $redirect->to_path,
+        );
     }
 
     /**
@@ -223,15 +234,23 @@ class RedirectRepository
     }
 
     /**
-     * The active redirects of a language (`old_path => to_path`) without the given row.
+     * The active redirects of a language (`old_path => to_path`) without the given row. Gone
+     * rows are never part of it: their empty target is "nowhere", not the home page, so a
+     * chain must not be followed into it.
      *
      * @return array<string, string>
      */
-    private function activeMap(string $language, ?Model $excluding): array
+    private function activeMap(string $language, ?Model $excluding, bool $permanentOnly = false): array
     {
+        $codes = array_values(array_filter(
+            RedirectCode::cases(),
+            static fn (RedirectCode $code): bool => $permanentOnly ? $code->isPermanent() : $code->isRedirect(),
+        ));
+
         $query = $this->query()
             ->where('language', $language)
-            ->where('active', true);
+            ->where('active', true)
+            ->whereIn('code', array_map(static fn (RedirectCode $code): int => $code->value, $codes));
 
         if ($excluding instanceof Model && $excluding->exists) {
             $query->whereKeyNot($excluding->getKey());

@@ -26,7 +26,8 @@ final class RedirectChain
         for ($i = 0; $i < $maxDepth; $i++) {
             $next = $map[$toPath] ?? null;
 
-            if ($next === null || isset($visited[$next])) {
+            // An empty target is a Gone row ("nowhere"), never a hop to the home page.
+            if ($next === null || $next === '' || isset($visited[$next])) {
                 break;
             }
 

@@ -17,6 +17,13 @@ class RedirectChainTest extends TestCase
         $this->assertSame('x', RedirectChain::resolve($map, 'x'));
     }
 
+    public function test_resolve_never_follows_into_an_empty_target(): void
+    {
+        $map = ['a' => 'b', 'b' => ''];
+
+        $this->assertSame('b', RedirectChain::resolve($map, 'a'));
+    }
+
     public function test_resolve_stops_at_an_existing_cycle(): void
     {
         $map = ['a' => 'b', 'b' => 'a'];
