@@ -2,7 +2,7 @@
 
 All notable changes to `asignua/filament-redirects` are documented here.
 
-## Unreleased
+## v1.0.1 - 2026-10-05
 
 - Chain compaction runs only through **permanent** redirects (301/308): saving a temporary 302/307 `b -> c` no longer re-points existing rows `x -> b` (301 ones included) to `c`, and a new redirect is no longer flattened through a temporary hop into a permanent `a -> c`. Removing a campaign redirect now leaves the permanent rows intact. Loops are still refused through any active redirect.
 - A redirect into a "Gone" source is no longer flattened to an empty target (which served a 301 to the home page); Gone rows are excluded from the chain map and `RedirectChain::resolve()` never follows an empty target.
