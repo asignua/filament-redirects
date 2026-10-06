@@ -1,6 +1,6 @@
 {
     "name": "asignua/filament-redirects",
-    "description": "A redirect manager with a 404 log for Filament panels: one-hop redirects, a fallback middleware that only touches 404s, multilingual paths and a one-click \"turn this 404 into a redirect\".",
+    "description": "A redirect manager and a 404 log for Filament 5 panels. The log aggregates the 404s your visitors and crawlers hit by path, with a referrer sample and client type, and drops scanner noise; one click turns a row into a redirect. Redirects are SEO-safe: they fire only on a real 404, are always one hop (chains are collapsed on save, loops refused), handle trailing slashes and HEAD, support multilingual paths, and are cached.",
     "keywords": ["filament", "filament-plugin", "laravel", "redirects", "301", "404", "seo", "not-found"],
     "homepage": "https://github.com/asignua/filament-redirects",
     "support": {
