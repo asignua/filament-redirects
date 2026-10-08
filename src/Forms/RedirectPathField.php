@@ -26,6 +26,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class RedirectPathField
 {
+    /** The length of the `to_path` column. */
+    private const int TO_PATH_MAX = 2048;
+
     public static function oldPath(?Closure $languageResolver = null): TextInput
     {
         $language = $languageResolver ?? self::languageFromForm();
@@ -40,6 +43,11 @@ class RedirectPathField
 
                     if ($raw === '') {
                         return; // emptiness is `required`'s business
+                    }
+
+                    // Shown by the edit form as stored and not touched: nothing to validate.
+                    if ($record instanceof Redirect && RedirectPath::unchanged($raw, $record->old_path)) {
+                        return;
                     }
 
                     if (preg_match('/\s/u', $raw) === 1) {
@@ -57,6 +65,14 @@ class RedirectPathField
                     }
 
                     $path = RedirectPath::normalize($raw, $locale);
+
+                    // The column is a varchar(191) of the NORMALISED path - not of what is typed (a
+                    // leading slash or a pasted host do not count).
+                    if (mb_strlen($path) > RedirectRepository::OLD_PATH_MAX) {
+                        $fail(__('filament-redirects::redirects.validation.too_long', ['max' => RedirectRepository::OLD_PATH_MAX]));
+
+                        return;
+                    }
 
                     // The source is always an address of THIS site: a request for a foreign host
                     // never reaches the app, so the rule could never fire.
@@ -94,7 +110,11 @@ class RedirectPathField
             });
     }
 
-    public static function toPath(?Closure $languageResolver = null, ?Closure $oldPathResolver = null): TextInput
+    /**
+     * @param bool $oldPathCanonical the old path comes from the 404 log: it is already in the canon
+     *                               and must not be normalised a second time
+     */
+    public static function toPath(?Closure $languageResolver = null, ?Closure $oldPathResolver = null, bool $oldPathCanonical = false): TextInput
     {
         $language = $languageResolver ?? self::languageFromForm();
         $oldPath = $oldPathResolver ?? static fn (Get $get): string => (string) ($get('old_path') ?? '');
@@ -102,8 +122,8 @@ class RedirectPathField
         return self::base('to_path', $language)
             ->label(__('filament-redirects::redirects.fields.new_path'))
             ->helperText(__('filament-redirects::redirects.fields.new_path_help'))
-            ->rule(static function (Get $get, ?Model $record) use ($language, $oldPath): Closure {
-                return static function (string $attribute, mixed $value, Closure $fail) use ($get, $record, $language, $oldPath): void {
+            ->rule(static function (Get $get, ?Model $record) use ($language, $oldPath, $oldPathCanonical): Closure {
+                return static function (string $attribute, mixed $value, Closure $fail) use ($get, $record, $language, $oldPath, $oldPathCanonical): void {
                     $locale = (string) $language($get);
                     $raw = trim((string) $value);
 
@@ -127,9 +147,15 @@ class RedirectPathField
                         return;
                     }
 
-                    $path = RedirectPath::normalize($raw, $locale);
+                    $path = RedirectPath::normalize($raw, $locale, target: true);
 
-                    if (RedirectPath::isExternal($path)) {
+                    if (mb_strlen($path) > self::TO_PATH_MAX) {
+                        $fail(__('filament-redirects::redirects.validation.too_long', ['max' => self::TO_PATH_MAX]));
+
+                        return;
+                    }
+
+                    if (RedirectPath::isAbsolute($path)) {
                         if (filter_var($path, FILTER_VALIDATE_URL) === false) {
                             $fail(__('filament-redirects::redirects.validation.invalid_url'));
                         }
@@ -137,7 +163,15 @@ class RedirectPathField
                         return; // chains and loops concern internal targets only
                     }
 
-                    $source = RedirectPath::normalize((string) $oldPath($get), $locale);
+                    $submitted = (string) $oldPath($get);
+
+                    // An untouched source of the edited redirect stays as stored (the edit page
+                    // does not re-normalise it either): `en/foo` must not be read as `foo`.
+                    $source = match (true) {
+                        $record instanceof Redirect && RedirectPath::unchanged($submitted, $record->old_path) => (string) $record->old_path,
+                        $oldPathCanonical => $submitted,
+                        default => RedirectPath::normalize($submitted, $locale),
+                    };
 
                     if ($source === '') {
                         return; // no single source (the bulk modal): the save checks each row
@@ -164,10 +198,9 @@ class RedirectPathField
     private static function base(string $name, Closure $language): TextInput
     {
         return TextInput::make($name)
-            ->maxLength($name === 'old_path' ? 191 : 2048)
             ->live(onBlur: true)
-            ->formatStateUsing(static fn (?string $state): string => RedirectPath::display($state))
-            ->prefix(static fn (Get $get): ?string => RedirectPath::isExternal((string) ($get($name) ?? ''))
+            ->formatStateUsing(static fn (?string $state): string => RedirectPath::display($state, target: $name === 'to_path'))
+            ->prefix(static fn (Get $get): ?string => RedirectPath::isAbsolute((string) ($get($name) ?? ''))
                 ? null
                 : RedirectPath::prefix((string) $language($get)));
     }

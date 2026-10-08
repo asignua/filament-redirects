@@ -41,6 +41,7 @@ return [
     ],
     'validation' => [
         'spaces' => 'Een pad mag geen spaties bevatten',
+        'too_long' => 'Het genormaliseerde pad mag maximaal :max tekens lang zijn',
         'old_external' => 'Het oude pad moet een adres op deze site zijn',
         'home' => 'De homepage geeft nooit een 404, dus een omleiding ervan zou nooit afgaan',
         'language_prefix' => 'Dit pad begint met het voorvoegsel van een andere taal. Kies die taal in plaats van het voorvoegsel te typen',
@@ -66,6 +67,8 @@ return [
         'deactivate' => 'Deactiveren',
         'recheck' => 'Opnieuw controleren',
         'recheck_done' => 'Gesloten 404’s verwijderd: :deleted (gecontroleerde regels: :checked)',
+        'recheck_limited' => 'Alleen de :count meest recent geziene regels zijn gecontroleerd; het commando redirects:recheck doorloopt het hele logboek',
+        'bulk_one_language' => 'Selecteer regels van één taal: het doel is relatief aan de taal van de regels',
         'prune' => 'Oude regels opschonen',
         'pruned' => ':count regels verwijderd die :days dagen niet zijn gezien',
         'create_redirect' => 'Omleiding maken',

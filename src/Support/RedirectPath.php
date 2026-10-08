@@ -80,8 +80,14 @@ final class RedirectPath
      *                                    (a foreign language segment stays: for an unprefixed
      *                                    language `en/shop` is a valid target)
      * @param list<string>|null $ownHosts replaces the registry (tests, migrations)
+     * @param bool              $target   a TARGET (`to_path`), not a source: it is served back as a
+     *                                    URL, so an encoded `%3F` / `%23` / `%25` stays encoded
+     *                                    (decoding it would turn it into a query string, a
+     *                                    fragment or an invalid escape) and a query string or a
+     *                                    fragment is left untouched. Sources are decoded in full -
+     *                                    they are matched against a decoded request path
      */
-    public static function normalize(?string $raw, string $language, ?array $ownHosts = null): string
+    public static function normalize(?string $raw, string $language, ?array $ownHosts = null, bool $target = false): string
     {
         $raw = trim((string) $raw);
 
@@ -94,12 +100,29 @@ final class RedirectPath
                 return $raw; // a foreign site: the target stays a whole URL
             }
 
-            $raw = $matches[2];
+            $rest = $matches[2];
+
+            // A target of a PREFIXED row that was pasted as an address of the unprefixed language
+            // (`https://site.test/about` on an `en` row) is explicit about its language, and the
+            // canon below has no way to say "from the site root, no prefix": it would be served as
+            // `/en/about`. Such an address stays whole and is served from the root as it is.
+            if ($target && self::leavesLanguage($rest, $language)) {
+                return $raw;
+            }
+
+            $raw = $rest;
+        }
+
+        $tail = '';
+
+        if ($target && ($cut = strcspn($raw, '?#')) < strlen($raw)) {
+            $tail = substr($raw, $cut);
+            $raw = substr($raw, 0, $cut);
         }
 
         // One canon for every alphabet: the DECODED path (`привіт`, not `%D0%BF...`). The request
         // side decodes too ({@see decode()}), so a typed and a pasted address meet in the middle.
-        $path = ltrim(self::decode($raw), '/');
+        $path = ltrim(self::decode($raw, keepReserved: $target), '/');
 
         if ($language !== Redirects::localeUrls()->unprefixed()
             && ($path === $language || str_starts_with($path, $language.'/'))) {
@@ -108,7 +131,44 @@ final class RedirectPath
 
         $path = trim($path, '/');
 
-        return $path === '' ? Redirects::ROOT : $path;
+        return ($path === '' ? Redirects::ROOT : $path).$tail;
+    }
+
+    /**
+     * An address of the site (the host is already cut off) that belongs to the UNPREFIXED
+     * language while the row is of a prefixed one.
+     */
+    private static function leavesLanguage(string $path, string $language): bool
+    {
+        $urls = Redirects::localeUrls();
+        $unprefixed = $urls->unprefixed();
+
+        if ($unprefixed === null || $language === $unprefixed) {
+            return false;
+        }
+
+        return $urls->parse(ltrim(self::decode(substr($path, 0, strcspn($path, '?#'))), '/'))[0] === $unprefixed;
+    }
+
+    /**
+     * Is the value an absolute address (`scheme://host`, `//host`)? Own or foreign.
+     */
+    public static function isAbsolute(?string $value): bool
+    {
+        return self::hostOf((string) $value) !== null;
+    }
+
+    /**
+     * The part after the host of an absolute address, as a path with a leading slash (with its
+     * query string): `https://site.test/about?a=1` -> `/about?a=1`.
+     */
+    public static function pathOf(string $value): string
+    {
+        if (preg_match(self::ABSOLUTE, trim($value), $matches) !== 1) {
+            return $value;
+        }
+
+        return '/'.ltrim($matches[2], '/');
     }
 
     /**
@@ -117,13 +177,15 @@ final class RedirectPath
      * `привіт` would never meet a request for `/%D0%BF%D1%80...`. A sequence that does not
      * decode to valid UTF-8 is left as it came (the database would refuse it anyway).
      */
-    public static function decode(string $path): string
+    public static function decode(string $path, bool $keepReserved = false): string
     {
         if (!str_contains($path, '%')) {
             return $path;
         }
 
-        $decoded = rawurldecode($path);
+        // `%25`, `%3F` and `%23` are re-escaped before decoding, so they survive it as they were
+        // (`%253F` decodes to `%3F`): a target keeps them as URL syntax, never as a live `?`.
+        $decoded = rawurldecode($keepReserved ? (string) preg_replace('/%(25|3F|23)/i', '%25$1', $path) : $path);
 
         return mb_check_encoding($decoded, 'UTF-8') ? $decoded : $path;
     }
@@ -132,10 +194,21 @@ final class RedirectPath
      * The inverse of {@see decode()} for the characters that mean something in a URL: a stored
      * (decoded) path such as `what?` (the request was `/what%3F`) is turned back into input that
      * {@see normalize()} reads as the same path, instead of as a path with a query string.
+     * `$reserved = false` escapes only whitespace: a stored TARGET already keeps its `%3F`.
      */
-    public static function escape(string $path): string
+    public static function escape(string $path, bool $reserved = true): string
     {
-        return strtr($path, ['%' => '%25', '?' => '%3F', '#' => '%23']);
+        if ($reserved) {
+            $path = strtr($path, ['%' => '%25', '?' => '%3F', '#' => '%23']);
+        }
+
+        // Whitespace and control characters too: the forms refuse them raw, and the stored path
+        // (the request was `/my%20page`) must come back from the form unchanged.
+        return preg_replace_callback(
+            '/[\s\x00-\x1F\x7F]/u',
+            static fn (array $char): string => rawurlencode($char[0]),
+            $path,
+        ) ?? $path;
     }
 
     /**
@@ -158,19 +231,46 @@ final class RedirectPath
     }
 
     /**
-     * The value of a form field: the canon with a leading slash (an external URL is unchanged).
+     * The value of a form field: the canon with a leading slash (an absolute URL is unchanged).
+     * The inverse of {@see normalize()}: `normalize(display($x))` gives `$x` back, so a stored
+     * `my page`, `what?` or `https:/site.test/x` can be saved again from the edit form. (A source
+     * that starts with the row's own language segment, `en/foo` on an `en` row, cannot be
+     * written in the canon - the edit page leaves an unchanged source alone, see
+     * {@see unchanged()}.)
      *
      * @param list<string>|null $ownHosts
+     * @param bool              $target   the value is a target (`to_path`): it keeps its encoded
+     *                                    reserved characters, only whitespace is escaped
      */
-    public static function display(?string $stored, ?array $ownHosts = null): string
+    public static function display(?string $stored, ?array $ownHosts = null, bool $target = false): string
     {
         $stored = trim((string) $stored);
 
-        if ($stored === '' || self::isExternal($stored, $ownHosts)) {
+        // `scheme:/host` (one slash) is the collapsed form of a scanned URL, a plain path; only a
+        // real address (`scheme://`, `//`) is shown as it is.
+        $collapsed = preg_match('#^https?:/(?!/)#i', $stored) === 1;
+
+        if ($stored === '' || (self::isAbsolute($stored) && ($target || !$collapsed))) {
             return $stored;
         }
 
-        return '/'.ltrim($stored, '/');
+        $value = '/'.ltrim(self::escape($stored, reserved: !$target), '/');
+
+        // A SOURCE is never an address: the nginx-collapsed `https:/site.test/x` of the 404 log is
+        // a plain path, so its `scheme:/` is escaped and {@see normalize()} does not read it as a
+        // host (and does not strip an own one).
+        return $target ? $value : (string) preg_replace('#^/(https?):/#i', '/$1%3A/', $value);
+    }
+
+    /**
+     * Is the submitted value of a source field exactly what {@see display()} showed for the
+     * stored one? Such a value is not re-normalised on save: some stored sources (a log path
+     * that looks like an address or starts with its own language) have no input form that
+     * normalize() would read back unchanged.
+     */
+    public static function unchanged(?string $submitted, ?string $stored): bool
+    {
+        return $stored !== null && $stored !== '' && trim((string) $submitted) === self::display($stored);
     }
 
     /**

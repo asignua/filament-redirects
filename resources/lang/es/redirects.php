@@ -41,6 +41,7 @@ return [
     ],
     'validation' => [
         'spaces' => 'Una ruta no puede contener espacios',
+        'too_long' => 'La ruta, ya normalizada, puede tener como máximo :max caracteres',
         'old_external' => 'La ruta antigua debe ser una dirección de este sitio',
         'home' => 'La página de inicio nunca devuelve un 404, así que una redirección desde ella nunca se activaría',
         'language_prefix' => 'Esta ruta empieza con el prefijo de otro idioma. Elija ese idioma en lugar de escribir su prefijo',
@@ -66,6 +67,8 @@ return [
         'deactivate' => 'Desactivar',
         'recheck' => 'Volver a comprobar',
         'recheck_done' => '404 cerrados eliminados: :deleted (entradas comprobadas: :checked)',
+        'recheck_limited' => 'Solo se comprobaron las :count filas vistas más recientemente; el comando redirects:recheck recorre todo el registro',
+        'bulk_one_language' => 'Seleccione filas de un solo idioma: el destino es relativo al idioma de las filas',
         'prune' => 'Limpiar entradas antiguas',
         'pruned' => 'Se eliminaron :count entradas no vistas en :days días',
         'create_redirect' => 'Crear redirección',

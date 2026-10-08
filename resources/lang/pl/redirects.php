@@ -41,6 +41,7 @@ return [
     ],
     'validation' => [
         'spaces' => 'Ścieżka nie może zawierać spacji',
+        'too_long' => 'Znormalizowana ścieżka może mieć najwyżej :max znaków',
         'old_external' => 'Stara ścieżka musi być adresem w tej witrynie',
         'home' => 'Strona główna nigdy nie zwraca 404, więc przekierowanie z niej nigdy by nie zadziałało',
         'language_prefix' => 'Ta ścieżka zaczyna się od prefiksu innego języka. Wybierz ten język zamiast wpisywać jego prefiks',
@@ -66,6 +67,8 @@ return [
         'deactivate' => 'Dezaktywuj',
         'recheck' => 'Sprawdź ponownie',
         'recheck_done' => 'Usunięto zamknięte 404: :deleted (sprawdzone wpisy: :checked)',
+        'recheck_limited' => 'Sprawdzono tylko :count ostatnio widzianych wierszy; polecenie redirects:recheck przechodzi cały dziennik',
+        'bulk_one_language' => 'Zaznacz wiersze jednego języka: cel jest względny wobec języka wierszy',
         'prune' => 'Wyczyść stare wpisy',
         'pruned' => 'Usunięto :count wpisów niewidzianych od :days dni',
         'create_redirect' => 'Utwórz przekierowanie',

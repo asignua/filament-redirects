@@ -41,6 +41,7 @@ return [
     ],
     'validation' => [
         'spaces' => 'Yol boşluk içeremez',
+        'too_long' => 'Normalleştirilmiş yol en fazla :max karakter olabilir',
         'old_external' => 'Eski yol bu sitedeki bir adres olmalıdır',
         'home' => 'Ana sayfa asla 404 döndürmez, bu yüzden ondan bir yönlendirme hiç çalışmaz',
         'language_prefix' => 'Bu yol başka bir dilin önekiyle başlıyor. Önekini yazmak yerine o dili seçin',
@@ -66,6 +67,8 @@ return [
         'deactivate' => 'Devre dışı bırak',
         'recheck' => 'Yeniden denetle',
         'recheck_done' => 'Kapanan 404’ler kaldırıldı: :deleted (denetlenen kayıt: :checked)',
+        'recheck_limited' => 'Yalnızca en son görülen :count satır denetlendi; redirects:recheck komutu tüm günlüğü tarar',
+        'bulk_one_language' => 'Tek bir dile ait satırları seçin: hedef, satırların diline göredir',
         'prune' => 'Eski kayıtları temizle',
         'pruned' => ':days gündür görülmeyen :count kayıt silindi',
         'create_redirect' => 'Yönlendirme oluştur',

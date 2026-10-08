@@ -41,6 +41,7 @@ return [
     ],
     'validation' => [
         'spaces' => 'A path cannot contain spaces',
+        'too_long' => 'The path can be at most :max characters long once normalised',
         'old_external' => 'The old path must be an address on this site',
         'home' => 'The home page never returns a 404, so a redirect from it would never fire',
         'language_prefix' => 'This path starts with another language’s prefix. Pick that language instead of typing its prefix',
@@ -66,6 +67,8 @@ return [
         'deactivate' => 'Deactivate',
         'recheck' => 'Recheck',
         'recheck_done' => 'Closed 404s removed: :deleted (rows checked: :checked)',
+        'recheck_limited' => 'Only the :count most recently seen rows were checked; the redirects:recheck command walks the whole log',
+        'bulk_one_language' => 'Select log rows of one language: the target is relative to the language of the rows',
         'prune' => 'Prune old entries',
         'pruned' => 'Deleted :count entries not seen for :days days',
         'create_redirect' => 'Create redirect',

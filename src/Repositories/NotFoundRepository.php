@@ -110,6 +110,16 @@ class NotFoundRepository
     }
 
     /**
+     * The most recently seen rows (the ones a visitor may still hit), at most `$count`.
+     *
+     * @return Collection<int, NotFoundEntry>
+     */
+    public function latestSeen(int $count): Collection
+    {
+        return $this->query()->orderByDesc('last_seen_at')->orderByDesc('id')->limit($count)->get();
+    }
+
+    /**
      * @param array<int, int> $ids
      */
     public function deleteByIds(array $ids): int

@@ -40,7 +40,8 @@ class RedirectResolver
     }
 
     /**
-     * The response for a found entry; null for Gone (a 404 stays a 404). Counts the hit -
+     * The response for a found entry; null for Gone (the caller then serves the site's error page
+     * with `redirects.gone_status`, 410 by default). Counts the hit -
      * call it exactly once per request.
      *
      * @param array{id: int, to: string, code: int} $entry
@@ -62,12 +63,23 @@ class RedirectResolver
         // A target on a foreign domain is stored as a whole URL: running it through the URL
         // builder would glue it into the path as `/https://other.site/x` (see RedirectPath).
         $external = RedirectPath::isExternal($entry['to']);
-        $target = $external
-            ? $entry['to']
-            : self::basePath($basePath).Redirects::localeUrls()->url($language, $entry['to'], false);
+
+        if ($external) {
+            $target = $entry['to'];
+        } elseif (RedirectPath::isAbsolute($entry['to'])) {
+            // An address of the unprefixed language on a row of a prefixed one: served from the
+            // site root as it is, no language segment is added.
+            $target = self::basePath($basePath).RedirectPath::pathOf($entry['to']);
+        } else {
+            $target = self::basePath($basePath).$this->internalUrl($language, $entry['to']);
+        }
 
         if (!$external && $query !== null && $query !== '' && (bool) config('filament-redirects.redirects.preserve_query', false)) {
-            $target .= (str_contains($target, '?') ? '&' : '?').$query;
+            // The query goes BEFORE a fragment: after a `#` it would never reach the server.
+            [$base, $fragment] = array_pad(explode('#', $target, 2), 2, null);
+            $base = (string) $base;
+
+            $target = $base.(str_contains($base, '?') ? '&' : '?').$query.($fragment === null ? '' : '#'.$fragment);
         }
 
         // NOT redirect()->to(): it would absolutise an internal target with the scheme and host
@@ -100,6 +112,23 @@ class RedirectResolver
         }
 
         return $redirect;
+    }
+
+    /**
+     * The URL of an internal target. A target whose first segment is ANOTHER prefixed language
+     * (`de/aktion` on an `en` row) is served in that language, not glued under the row's own
+     * prefix (`/en/de/aktion`).
+     */
+    private function internalUrl(string $language, string $to): string
+    {
+        $urls = Redirects::localeUrls();
+        [$first, $rest] = array_pad(explode('/', $to, 2), 2, '');
+
+        if ($first !== $language && $first !== (string) $urls->unprefixed() && in_array($first, $urls->all(), true)) {
+            return $urls->url($first, $rest === '' ? Redirects::ROOT : $rest, false);
+        }
+
+        return $urls->url($language, $to, false);
     }
 
     /**

@@ -41,6 +41,7 @@ return [
     ],
     'validation' => [
         'spaces' => 'Ein Pfad darf keine Leerzeichen enthalten',
+        'too_long' => 'Der Pfad darf nach der Normalisierung höchstens :max Zeichen lang sein',
         'old_external' => 'Der alte Pfad muss eine Adresse auf dieser Website sein',
         'home' => 'Die Startseite liefert nie einen 404, daher würde eine Weiterleitung von ihr nie greifen',
         'language_prefix' => 'Dieser Pfad beginnt mit dem Präfix einer anderen Sprache. Wählen Sie stattdessen diese Sprache',
@@ -66,6 +67,8 @@ return [
         'deactivate' => 'Deaktivieren',
         'recheck' => 'Erneut prüfen',
         'recheck_done' => 'Geschlossene 404 entfernt: :deleted (geprüfte Einträge: :checked)',
+        'recheck_limited' => 'Es wurden nur die :count zuletzt gesehenen Einträge geprüft; der Befehl redirects:recheck prüft das gesamte Log',
+        'bulk_one_language' => 'Wählen Sie Einträge nur einer Sprache aus: Das Ziel wird relativ zur Sprache der Einträge angegeben',
         'prune' => 'Alte Einträge bereinigen',
         'pruned' => ':count Einträge gelöscht, seit :days Tagen nicht gesehen',
         'create_redirect' => 'Weiterleitung erstellen',

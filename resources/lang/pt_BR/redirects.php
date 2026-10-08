@@ -41,6 +41,7 @@ return [
     ],
     'validation' => [
         'spaces' => 'Um caminho não pode conter espaços',
+        'too_long' => 'O caminho normalizado pode ter no máximo :max caracteres',
         'old_external' => 'O caminho antigo deve ser um endereço deste site',
         'home' => 'A página inicial nunca retorna 404, então um redirecionamento a partir dela nunca seria acionado',
         'language_prefix' => 'Este caminho começa com o prefixo de outro idioma. Escolha esse idioma em vez de digitar o prefixo',
@@ -66,6 +67,8 @@ return [
         'deactivate' => 'Desativar',
         'recheck' => 'Verificar novamente',
         'recheck_done' => '404 resolvidos removidos: :deleted (entradas verificadas: :checked)',
+        'recheck_limited' => 'Apenas as :count linhas vistas mais recentemente foram verificadas; o comando redirects:recheck percorre todo o registro',
+        'bulk_one_language' => 'Selecione linhas de um único idioma: o destino é relativo ao idioma das linhas',
         'prune' => 'Limpar entradas antigas',
         'pruned' => ':count entradas não vistas há :days dias foram excluídas',
         'create_redirect' => 'Criar redirecionamento',

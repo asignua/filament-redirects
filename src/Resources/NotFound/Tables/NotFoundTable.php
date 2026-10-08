@@ -18,8 +18,10 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -159,30 +161,28 @@ class NotFoundTable
             // The schema is a closure: the language and `old_path` come from the ROW, and both
             // the prefix affix of the field and the self-loop check depend on them.
             ->schema(fn (NotFoundEntry $record): array => [
-                RedirectPathField::toPath(
+                self::target(RedirectPathField::toPath(
                     languageResolver: static fn (): string => $record->language,
                     oldPathResolver: static fn (): string => $record->path,
-                )->required(),
+                    oldPathCanonical: true,
+                )),
 
-                Select::make('code')
-                    ->label(__('filament-redirects::redirects.fields.code'))
-                    ->options(RedirectCode::options())
-                    ->default(RedirectCode::Permanent->value)
-                    ->required(),
+                self::codeSelect(),
 
                 Toggle::make('active')
                     ->label(__('filament-redirects::redirects.fields.active'))
                     ->default(true),
             ])
             ->fillForm(fn (NotFoundEntry $record): array => [
-                'to_path' => RedirectPath::display(Redirects::suggestionFor($record->language, $record->path)),
+                'to_path' => RedirectPath::display(Redirects::suggestionFor($record->language, $record->path), target: true),
                 'code' => RedirectCode::Permanent->value,
                 'active' => true,
             ])
             ->action(function (NotFoundEntry $record, array $data, Action $action): void {
                 $repository = app(RedirectRepository::class);
 
-                if ($repository->oldPathTaken($record->language, RedirectPath::normalize($record->path, $record->language), null)) {
+                // The log path is already in the canon: no second normalisation.
+                if ($repository->oldPathTaken($record->language, $record->path, null)) {
                     // A redirect already exists (made in another tab): the row is stale.
                     $record->delete();
 
@@ -195,12 +195,8 @@ class NotFoundTable
                 }
 
                 try {
-                    $repository->create([
-                        // The log stores the DECODED path: escape it, so a real `what?`
-                        // (requested as `/what%3F`) is not read as a query string.
-                        'old_path' => RedirectPath::escape($record->path),
-                        'to_path' => (string) $data['to_path'],
-                        'language' => $record->language,
+                    $repository->createFromLog($record, [
+                        'to_path' => (string) ($data['to_path'] ?? ''),
                         'code' => (int) $data['code'],
                         'active' => (bool) ($data['active'] ?? true),
                     ]);
@@ -234,19 +230,28 @@ class NotFoundTable
             ->label(__('filament-redirects::redirects.actions.create_redirects'))
             ->icon(Heroicon::OutlinedArrowsRightLeft)
             ->modalHeading(__('filament-redirects::redirects.actions.create_redirects'))
-            ->schema([
-                RedirectPathField::toPath(
-                    languageResolver: static fn (): string => Redirects::localeUrls()->default(),
+            // The target is typed relative to ONE language (the affix shows it), so the rows must
+            // be of one language - see the check in the action.
+            ->schema(fn (Collection $selectedRecords): array => [
+                self::target(RedirectPathField::toPath(
+                    languageResolver: static fn (): string => ($first = $selectedRecords->first()) instanceof NotFoundEntry
+                        ? $first->language
+                        : Redirects::localeUrls()->default(),
                     oldPathResolver: static fn (): string => '',
-                )->required(),
+                )),
 
-                Select::make('code')
-                    ->label(__('filament-redirects::redirects.fields.code'))
-                    ->options(RedirectCode::options())
-                    ->default(RedirectCode::Permanent->value)
-                    ->required(),
+                self::codeSelect(),
             ])
             ->action(function (Collection $records, array $data): void {
+                if ($records->pluck('language')->unique()->count() > 1) {
+                    Notification::make()
+                        ->title(__('filament-redirects::redirects.actions.bulk_one_language'))
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
                 $repository = app(RedirectRepository::class);
                 $created = 0;
                 $skipped = 0;
@@ -256,9 +261,7 @@ class NotFoundTable
                         continue;
                     }
 
-                    $old = RedirectPath::normalize($record->path, $record->language);
-
-                    if ($repository->oldPathTaken($record->language, $old, null)) {
+                    if ($repository->oldPathTaken($record->language, $record->path, null)) {
                         $record->delete(); // already redirected: the row is stale, not a failure
                         $skipped++;
 
@@ -266,12 +269,8 @@ class NotFoundTable
                     }
 
                     try {
-                        $repository->create([
-                            // The log stores the DECODED path: escape it, so a real `what?`
-                            // (requested as `/what%3F`) is not read as a query string.
-                            'old_path' => RedirectPath::escape($record->path),
-                            'to_path' => (string) $data['to_path'],
-                            'language' => $record->language,
+                        $repository->createFromLog($record, [
+                            'to_path' => (string) ($data['to_path'] ?? ''),
                             'code' => (int) $data['code'],
                             'active' => true,
                         ]);
@@ -297,6 +296,30 @@ class NotFoundTable
                 $notification->send();
             })
             ->deselectRecordsAfterCompletion();
+    }
+
+    /**
+     * The code of the new redirect. `live()`: the target field depends on it (Gone has none).
+     */
+    private static function codeSelect(): Select
+    {
+        return Select::make('code')
+            ->label(__('filament-redirects::redirects.fields.code'))
+            ->options(RedirectCode::options())
+            ->default(RedirectCode::Permanent->value)
+            ->live()
+            ->required();
+    }
+
+    /**
+     * Mirrors the redirect form: "Gone" answers with an error page and leads nowhere, so it has
+     * no target to type (and none to be required).
+     */
+    private static function target(TextInput $field): TextInput
+    {
+        return $field
+            ->requiredUnless('code', (string) RedirectCode::Gone->value)
+            ->hidden(fn (Get $get): bool => (int) $get('code') === RedirectCode::Gone->value);
     }
 
     private static function refused(ValidationException $exception): void

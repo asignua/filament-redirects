@@ -30,6 +30,10 @@ class NotFoundResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'path';
 
+    // The log has no view or edit page: a global-search hit would lead to a dead
+    // `?tableAction=view` URL, and scanner paths would flood the panel's search.
+    protected static bool $isGloballySearchable = false;
+
     public static function getModel(): string
     {
         return app(NotFoundRepository::class)->modelClass();

@@ -16,6 +16,9 @@ class ListNotFound extends ListRecords
 {
     protected static string $resource = NotFoundResource::class;
 
+    /** How many of the most recently seen rows the panel's "Recheck" looks at. */
+    private const int RECHECK_LIMIT = 2000;
+
     protected function getHeaderActions(): array
     {
         return [
@@ -25,15 +28,23 @@ class ListNotFound extends ListRecords
                 ->icon(Heroicon::OutlinedCheckBadge)
                 ->color('gray')
                 ->action(function (): void {
-                    $result = app(NotFoundRecheck::class)->run();
+                    // One web request: a lookup per row over a log of tens of thousands of rows
+                    // would outlast `max_execution_time` and leave the clean-up half done. The
+                    // panel checks the most recent rows; `redirects:recheck` walks the whole log.
+                    $result = app(NotFoundRecheck::class)->run(limit: self::RECHECK_LIMIT);
 
-                    Notification::make()
+                    $notification = Notification::make()
                         ->title(__('filament-redirects::redirects.actions.recheck_done', [
                             'deleted' => $result['deleted'],
                             'checked' => $result['checked'],
                         ]))
-                        ->success()
-                        ->send();
+                        ->success();
+
+                    if ($result['checked'] >= self::RECHECK_LIMIT) {
+                        $notification->body(__('filament-redirects::redirects.actions.recheck_limited', ['count' => self::RECHECK_LIMIT]));
+                    }
+
+                    $notification->send();
                 }),
 
             // Prunes BY AGE, with the same horizon as `redirects:prune`.

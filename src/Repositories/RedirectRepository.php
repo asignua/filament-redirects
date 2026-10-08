@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Asignua\FilamentRedirects\Repositories;
 
 use Asignua\FilamentRedirects\Enums\RedirectCode;
+use Asignua\FilamentRedirects\Models\NotFoundEntry;
 use Asignua\FilamentRedirects\Models\Redirect;
 use Asignua\FilamentRedirects\Redirects;
 use Asignua\FilamentRedirects\Support\RedirectCache;
@@ -21,6 +22,9 @@ use Illuminate\Validation\ValidationException;
  */
 class RedirectRepository
 {
+    /** The length of the `old_path` column. */
+    public const int OLD_PATH_MAX = 191;
+
     /**
      * @return class-string<Redirect>
      */
@@ -53,7 +57,23 @@ class RedirectRepository
             $redirect->entity()->associate($entity);
         }
 
-        return $this->fill($redirect, $data);
+        return $this->fill($redirect, $data, explicitEntity: $entity !== null);
+    }
+
+    /**
+     * Creates a redirect from a row of the 404 log. The log stores the path the way the middleware
+     * saw it - already in the canon - so it is assigned VERBATIM: normalising it a second time
+     * would strip a host-looking `https:/site.test/x` (the nginx-collapsed form of a scanned URL)
+     * or a language-looking `en/foo` (the request `/en/en/foo`), and the redirect would then guard
+     * an address other than the one that 404s.
+     *
+     * @param array<string, mixed> $data `to_path`, `code`, `active` (`old_path` and `language` come from the row)
+     */
+    public function createFromLog(NotFoundEntry $entry, array $data): Redirect
+    {
+        $class = $this->modelClass();
+
+        return $this->fill(new $class, [...$data, 'old_path' => $entry->path, 'language' => $entry->language], oldPathCanonical: true);
     }
 
     /**
@@ -67,7 +87,7 @@ class RedirectRepository
     /**
      * @param array<string, mixed> $data
      */
-    private function fill(Redirect $redirect, array $data): Redirect
+    private function fill(Redirect $redirect, array $data, bool $explicitEntity = false, bool $oldPathCanonical = false): Redirect
     {
         // The language goes FIRST: the normalisation of the paths depends on it (a row's own
         // language prefix is stripped). An update without a `language` key keeps the current one.
@@ -88,17 +108,25 @@ class RedirectRepository
             // source with `?` or `#` would be saved and stay dead forever. Checked on the RAW
             // input: an encoded `%3F` / `%23` is a real path character (a request for
             // `/what%3F` matches `what?`) and must stay allowed - see RedirectPath::escape().
-            if (preg_match('/[?#]/', $rawOldPath) === 1) {
+            if (!$oldPathCanonical && preg_match('/[?#]/', $rawOldPath) === 1) {
                 throw ValidationException::withMessages([
                     'data.old_path' => __('filament-redirects::redirects.validation.query'),
                 ]);
             }
 
-            $redirect->old_path = RedirectPath::normalize($rawOldPath, $language);
+            $redirect->old_path = $oldPathCanonical ? $rawOldPath : RedirectPath::normalize($rawOldPath, $language);
+
+            // The column is a varchar(191) of the NORMALISED path: a readable error instead of a
+            // SQL "data too long" (the form checks the same on the field).
+            if (mb_strlen($redirect->old_path) > self::OLD_PATH_MAX) {
+                throw ValidationException::withMessages([
+                    'data.old_path' => __('filament-redirects::redirects.validation.too_long', ['max' => self::OLD_PATH_MAX]),
+                ]);
+            }
         }
 
         if (array_key_exists('to_path', $data)) {
-            $redirect->to_path = RedirectPath::normalize((string) ($data['to_path'] ?? ''), $language);
+            $redirect->to_path = RedirectPath::normalize((string) ($data['to_path'] ?? ''), $language, target: true);
         }
 
         if (array_key_exists('code', $data)) {
@@ -132,8 +160,18 @@ class RedirectRepository
             ]);
         }
 
-        // A target on a foreign site takes part in neither chains nor entity binding.
-        $external = RedirectPath::isExternal($redirect->to_path);
+        // A target on a foreign site (or an address pasted whole) takes part in neither chains
+        // nor entity binding.
+        $external = RedirectPath::isAbsolute($redirect->to_path);
+
+        // The binding follows the target: a new target (or none at all - Gone, an external URL)
+        // must not keep pointing at the record of the old one. Only an entity handed in by the
+        // caller of THIS call survives. Done before the compaction below copies the binding onto
+        // other rows.
+        if (!$explicitEntity && $redirect->entity_id !== null
+            && ($external || !$code->isRedirect() || $redirect->isDirty('to_path'))) {
+            $redirect->entity()->dissociate();
+        }
 
         // Loop guard + flattening of the target: only for real, ACTIVE redirects. An inactive
         // draft `b -> c` must not re-point a live `a -> b` (the visitor would follow a rule that
@@ -174,8 +212,12 @@ class RedirectRepository
         });
 
         // The `saved` event flushed the map INSIDE the transaction; a request in between could
-        // have cached the old rows again. Flush once more after the commit.
-        app(RedirectCache::class)->flush();
+        // have cached the old rows again. Flush once more AFTER the commit - of the OUTER one when
+        // the caller (a slug-change listener in the host's service) has its own transaction: the
+        // transaction above is then only a savepoint. Outside any transaction it runs right away.
+        $redirect->getConnection()->afterCommit(static function (): void {
+            app(RedirectCache::class)->flush();
+        });
 
         return $redirect;
     }

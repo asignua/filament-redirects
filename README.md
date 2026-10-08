@@ -166,9 +166,10 @@ The fallback middleware writes every unmatched `GET` that has no redirect into t
 - **Create redirect** (row action) opens a modal for the target; `Redirects::suggestUsing()` can prefill it. The row
   leaves the log and the redirect counts the hits from then on. A loop is refused on the target field.
 - **Create redirects** (bulk action) sends many paths to one target; rows that would loop stay in the log and are
-  reported.
+  reported. The target is typed relative to one language, so the selected rows must be of one language. "Gone" needs no
+  target.
 - **Recheck** closes rows that now have a redirect - and, with `Redirects::resolvesUsing()`, rows whose path now shows
-  a page. **Prune old entries** removes rows by age.
+  a page. The panel button checks the 2000 most recently seen rows (one web request); `redirects:recheck` walks the whole log. **Prune old entries** removes rows by age.
 - Filters: language, bots / no bots, with / without a referrer. A `Gone` redirect and a matched redirect are deliberate
   decisions and are never logged.
 
@@ -197,6 +198,11 @@ Redirects::locales(default: 'uk', all: ['uk', 'en', 'de'], unprefixed: 'uk');
   is more than one language.
 - A row's own prefix is stripped from what you type; another language's prefix is kept in a target (`en/shop` is a valid
   target of a `uk` row) and refused in a source of the unprefixed language.
+- **A target in another language.** On a row of a prefixed language the first segment of a target that is ANOTHER prefixed
+  language is served in that language (`de/aktion` on an `en` row -> `/de/aktion`, not `/en/de/aktion`). To reach a page
+  of the unprefixed language from a prefixed row, paste its whole address (`https://site.test/about` on an `en` row): it is
+  kept whole and served from the site root. Chains that cross languages are not compacted (compaction works inside one
+  language).
 - For a CMS that keeps languages in its own config, pass a closure - it is resolved at the moment of use:
   `Redirects::useLocaleUrls(fn (): LocaleUrls => new PrefixedLocaleUrls(...))`.
 - For any other URL scheme implement `Asignua\FilamentRedirects\Contracts\LocaleUrls` (`parse`, `url`, `prefix`,
@@ -214,7 +220,7 @@ use Asignua\FilamentRedirects\Redirects;
 Redirects::create('old/page', 'new/page');                                   // 301, default language
 Redirects::create('old/page', 'new/page', 302, 'en');                        // 302 for the `en` row
 Redirects::create('old/page', 'https://other.site/x', RedirectCode::PermanentKeepMethod);
-Redirects::create('retired', '', RedirectCode::Gone);                        // keep the 404
+Redirects::create('retired', '', RedirectCode::Gone);                        // answer with the error page (410)
 Redirects::create('old/page', 'new/page', entity: $post);                    // remember what it leads to
 ```
 

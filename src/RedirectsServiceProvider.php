@@ -11,6 +11,7 @@ use Asignua\FilamentRedirects\Repositories\NotFoundRepository;
 use Asignua\FilamentRedirects\Repositories\RedirectRepository;
 use Asignua\FilamentRedirects\Support\RedirectCache;
 use Illuminate\Console\Scheduling\Schedule as LaravelSchedule;
+use Illuminate\Database\Eloquent\Model;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -48,12 +49,17 @@ class RedirectsServiceProvider extends PackageServiceProvider
         // host subclass), not on the base one.
         $model = app(RedirectRepository::class)->modelClass();
 
-        $model::saved(static function (): void {
-            app(RedirectCache::class)->flush();
-        });
-        $model::deleted(static function (): void {
-            app(RedirectCache::class)->flush();
-        });
+        // Flushed once the change is COMMITTED: a host often saves a redirect inside its own
+        // transaction, and a flush before the commit lets a concurrent request cache the old rows
+        // forever. Outside a transaction `afterCommit` runs right away.
+        $flush = static function (Model $redirect): void {
+            $redirect->getConnection()->afterCommit(static function (): void {
+                app(RedirectCache::class)->flush();
+            });
+        };
+
+        $model::saved($flush);
+        $model::deleted($flush);
 
         $this->callAfterResolving(LaravelSchedule::class, Schedule::register(...));
     }

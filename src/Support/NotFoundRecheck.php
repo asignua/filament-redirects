@@ -24,9 +24,13 @@ use Asignua\FilamentRedirects\Repositories\NotFoundRepository;
 class NotFoundRecheck
 {
     /**
+     * @param int|null $limit check only this many of the most recently seen rows (the panel does
+     *                        it inside one web request, which a log of tens of thousands of rows
+     *                        and a lookup per row would outlast); null = the whole log
+     *
      * @return array{checked: int, resolved: int, redirected: int, deleted: int}
      */
-    public function run(bool $dryRun = false): array
+    public function run(bool $dryRun = false, ?int $limit = null): array
     {
         $redirects = app(RedirectCache::class)->map();
 
@@ -37,7 +41,7 @@ class NotFoundRecheck
 
         $repository = app(NotFoundRepository::class);
 
-        $repository->chunkOrderedById(200, function ($entries) use (
+        $process = function ($entries) use (
             $repository, $redirects, $dryRun, &$checked, &$resolved, &$redirected, &$deleted
         ): void {
             /** @var array<int, int> $stale */
@@ -64,7 +68,13 @@ class NotFoundRecheck
             }
 
             $deleted += $dryRun ? count($stale) : $repository->deleteByIds($stale);
-        });
+        };
+
+        if ($limit !== null) {
+            $process($repository->latestSeen($limit));
+        } else {
+            $repository->chunkOrderedById(200, $process);
+        }
 
         return ['checked' => $checked, 'resolved' => $resolved, 'redirected' => $redirected, 'deleted' => $deleted];
     }
