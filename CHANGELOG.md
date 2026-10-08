@@ -2,7 +2,7 @@
 
 All notable changes to `asignua/filament-redirects` are documented here.
 
-## Unreleased
+## v1.0.2 - 2026-10-08
 
 - Fix: the edit form can save a redirect whose stored path contains whitespace, `?` or `#` (`my page`, `what?`): `RedirectPath::display()` is now the exact inverse of `normalize()` (it percent-encodes what the canon decodes).
 - Fix: the cache is flushed after the OUTER transaction commits (the model `saved`/`deleted` listeners and `RedirectRepository` use `afterCommit`), so a redirect saved inside a host transaction can no longer leave a stale map cached forever.
