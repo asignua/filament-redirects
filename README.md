@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/packagist/l/asignua/filament-redirects.svg?style=flat-square)](https://github.com/asignua/filament-redirects/blob/main/LICENSE.md)
 [![Plumb score](https://plumbphp.dev/badges/asignua/filament-redirects/composite.svg)](https://plumbphp.dev/asignua/filament-redirects)
 
-<img class="filament-hidden" src="https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.0/art/cover.jpg" alt="Filament Redirects">
+<img class="filament-hidden" src="https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.3/art/cover.jpg" alt="Filament Redirects">
 
 A redirect manager **and a 404 log** for [Filament](https://filamentphp.com) panels, with one button that turns a
 dead URL from the log into a redirect.
@@ -40,15 +40,15 @@ fire on a real 404, they are always **one hop** (chains are collapsed when you s
 
 The redirects list - one hop, any status code, a hit counter per redirect:
 
-![Redirects](https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.0/art/redirects.jpg)
+![Redirects](https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.3/art/redirects.jpg)
 
 The 404 log - what visitors and Googlebot actually hit, with a referrer sample and the kind of client:
 
-![404 log](https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.0/art/not-found-log.jpg)
+![404 log](https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.3/art/not-found-log.jpg)
 
 **Create redirect** on a row opens a modal prefilled by `Redirects::suggestUsing()`; the row leaves the log and the old URL redirects at once:
 
-![Create a redirect from a 404 row](https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.0/art/create-from-404.jpg)
+![Create a redirect from a 404 row](https://raw.githubusercontent.com/asignua/filament-redirects/v1.0.3/art/create-from-404.jpg)
 
 ## Requirements
 

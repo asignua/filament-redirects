@@ -2,6 +2,11 @@
 
 All notable changes to `asignua/filament-redirects` are documented here.
 
+## v1.0.3 - 2026-10-25
+
+- Screenshots and the cover carry the «made in asign» mark; README shows the Stand With Ukraine badge.
+- Dependency updates (CI actions, dev tooling).
+
 ## v1.0.2 - 2026-10-08
 
 - Fix: the edit form can save a redirect whose stored path contains whitespace, `?` or `#` (`my page`, `what?`): `RedirectPath::display()` is now the exact inverse of `normalize()` (it percent-encodes what the canon decodes).
