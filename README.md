@@ -347,6 +347,15 @@ The tests run on Orchestra Testbench with an in-memory SQLite database and a wor
 
 See the [CHANGELOG](https://github.com/asignua/filament-redirects/blob/main/CHANGELOG.md).
 
+## More plugins by asign
+
+- [SEO Files](https://filamentphp.com/plugins/asign-seo-files) — sitemap, robots.txt and llms.txt
+- [Translatable Fields](https://filamentphp.com/plugins/asign-translatable-fields) — locale tabs for spatie/laravel-translatable forms
+- [Activity Log Plus](https://filamentphp.com/plugins/asign-activity-log-plus) — audit trail and history for models
+- [Themes](https://filamentphp.com/plugins/asign-themes) — per-user and per-panel colour themes
+
+All plugins: <https://filamentphp.com/plugins?q=asign>
+
 ## License
 
 MIT - see the [LICENSE](https://github.com/asignua/filament-redirects/blob/main/LICENSE.md).
