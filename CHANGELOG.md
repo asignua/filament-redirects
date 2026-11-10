@@ -2,6 +2,10 @@
 
 All notable changes to `asignua/filament-redirects` are documented here.
 
+## v1.1.0 - 2026-11-10
+
+- Requires Filament ^5.11.2; no deprecated Filament API was in use, so no code changes.
+
 ## v1.0.3 - 2026-10-25
 
 - Screenshots and the cover carry the «made in asign» mark; README shows the Stand With Ukraine badge.
