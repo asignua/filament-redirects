@@ -356,6 +356,8 @@ See the [CHANGELOG](https://github.com/asignua/filament-redirects/blob/main/CHAN
 
 All plugins: <https://filamentphp.com/plugins?q=asign>
 
+Catalogue of free and commercial plugins: <https://asign.tech/en/plugins>
+
 ## License
 
 MIT - see the [LICENSE](https://github.com/asignua/filament-redirects/blob/main/LICENSE.md).
